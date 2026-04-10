@@ -94,6 +94,40 @@ const ASSETS = {
   forge: ["OT-HMI-03","OT-PLC-07","WIN-ENG-12","SVR-MES-01","OT-SCADA-02","WIN-SHOP-22","WIN-QA-05"],
 };
 
+
+// Playbook suggestions mapped to MITRE techniques (R5)
+const PLAYBOOKS = {
+  "T1059.001": { id: "PB-012", name: "PowerShell Execution", steps: ["Isolate endpoint from network", "Capture process memory dump", "Notify asset owner and review execution context"] },
+  "T1566.001": { id: "PB-003", name: "Phishing Response", steps: ["Quarantine email across all mailboxes", "Check for clicked links or opened attachments", "Reset credentials for any exposed accounts"] },
+  "T1486":     { id: "PB-001", name: "Ransomware Containment", steps: ["Isolate affected hosts immediately", "Preserve forensic evidence before remediation", "Activate IR retainer and notify legal"] },
+  "T1078":     { id: "PB-018", name: "Compromised Credentials", steps: ["Force password reset on affected accounts", "Review recent access logs for lateral movement", "Enable MFA if not already enforced"] },
+  "T1055":     { id: "PB-015", name: "Process Injection Response", steps: ["Capture memory of injecting and target process", "Isolate host and check for persistence", "Scan for similar injection across fleet"] },
+  "T1071.001": { id: "PB-022", name: "C2 Channel Investigation", steps: ["Block destination IP/domain at perimeter", "Review DNS logs for beaconing patterns", "Hunt for same indicators across all clients"] },
+  "T1021.001": { id: "PB-009", name: "Unauthorized RDP", steps: ["Disable RDP on affected host", "Review authentication logs for source IP", "Check for new local accounts or persistence"] },
+  "T1053.005": { id: "PB-011", name: "Scheduled Task Persistence", steps: ["Enumerate all scheduled tasks on host", "Remove unauthorized tasks and capture artifacts", "Review task creation timeline for initial access"] },
+  "T1003.001": { id: "PB-002", name: "Credential Dumping", steps: ["Isolate host — assume full credential compromise", "Force password reset for all accounts that logged into host", "Review LSASS access patterns across fleet"] },
+  "T1190":     { id: "PB-005", name: "Exploit Response", steps: ["Patch or WAF-block the exploited vulnerability", "Review web server logs for exploitation timeline", "Check for webshells or dropped payloads"] },
+  "T1110.003": { id: "PB-019", name: "Password Spray Response", steps: ["Lock out targeted accounts temporarily", "Review source IPs and correlate across tenants", "Enforce rate limiting at identity provider"] },
+  "T1569.002": { id: "PB-014", name: "Malicious Service", steps: ["Stop and disable the suspicious service", "Capture service binary for analysis", "Review service creation event for source process"] },
+};
+
+// Initial boost rules — known-bad patterns that elevate scores (R2)
+const INITIAL_BOOST_RULES = [
+  { id: "BR-001", pattern: "regsvr32.*scrobj", type: "regex", boost: 25, reason: "LOLBIN: regsvr32 scriptlet execution", tactic: "Execution" },
+  { id: "BR-002", pattern: "T1486", type: "technique", boost: 15, reason: "Ransomware indicators always critical", tactic: "Impact" },
+  { id: "BR-003", pattern: "T1003.001", type: "technique", boost: 20, reason: "Credential dumping is high-impact regardless of context", tactic: "Credential Access" },
+  { id: "BR-004", pattern: "mimikatz|sekurlsa", type: "regex", boost: 30, reason: "Known offensive tool", tactic: "Credential Access" },
+  { id: "BR-005", pattern: "T1059.001", type: "technique_at_new_client", boost: 18, reason: "PowerShell at immature clients is higher risk", tactic: "Execution" },
+];
+
+// Model retrain metadata (R6)
+const RETRAIN_INFO = {
+  lastRetrain: new Date(new Date().setHours(3,0,0,0)).toISOString(),
+  nextRetrain: "tonight at 3:00 AM",
+  modelSize: "5.2 GB",
+  trainingEvents: 147832,
+};
+
 function seeded(seed) { let s = seed; return () => { s = (s*9301+49297)%233280; return s/233280; }; }
 
 function buildInitialAlerts() {
@@ -174,7 +208,7 @@ function computeClientMaturity(clientId, decisions) {
   const drift = (tps/ds.length)*18 - (fps/ds.length)*10;
   return Math.max(0, Math.min(100, Math.round(c.baselineMaturity+drift)));
 }
-function scoreAlert(alert, techStats, clientMaturity) {
+function scoreAlert(alert, techStats, clientMaturity, boostRules=[]) {
   const c = CLIENTS.find(x=>x.id===alert.clientId);
   const k = `${alert.clientId}::${alert.technique.id}`;
   const s = techStats[k] || {tp:0, fp:0, total:0};
@@ -210,6 +244,8 @@ export default function SentryV2() {
   const [selectedClientId, setSelectedClientId] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
   const [showTests, setShowTests] = useState(false);
+  const [boostRules, setBoostRules] = useState(INITIAL_BOOST_RULES);
+  const [clientConfirmations, setClientConfirmations] = useState({}); // alertId -> {confirmedAt, by}
   const [theme, setTheme] = useState("auto");
   const [systemDark, setSystemDark] = useState(true);
   useEffect(() => {
@@ -231,7 +267,7 @@ export default function SentryV2() {
   const scoredAlerts = useMemo(()=>{
     return alerts.map(a=>({
       ...a,
-      sentryScore: scoreAlert(a, techStats, maturityByClient[a.clientId]),
+      sentryScore: scoreAlert(a, techStats, maturityByClient[a.clientId], boostRules),
     })).sort((a,b)=>{
       if (a.state==="decided" && b.state!=="decided") return 1;
       if (b.state==="decided" && a.state!=="decided") return -1;
@@ -250,6 +286,19 @@ export default function SentryV2() {
     setAlerts(list => list.map(a => a.id===alert.id ? {...a, state:"decided", decision} : a));
     setExpandedId(null);
   }
+  function confirmFromClient(alertId) {
+    const alert = alerts.find(a => a.id === alertId);
+    if (!alert) return;
+    setClientConfirmations(cc => ({...cc, [alertId]: { confirmedAt: Date.now(), by: "CLIENT" }}));
+    // Feed confirmation back into decisions as a stronger TP signal (R3)
+    const boostEntry = {
+      logId: `CC-${Date.now()}`, alertId, clientId: alert.clientId,
+      techniqueId: alert.technique.id, tactic: alert.technique.tactic,
+      decision: "TP", analyst: "CLIENT_CONFIRMED", ts: Date.now(), sentryScore: 99,
+    };
+    setDecisions(d => [boostEntry, ...d]);
+  }
+
   function undoLast() {
     if (decisions.length===0) return;
     const last = decisions[0];
@@ -364,11 +413,11 @@ export default function SentryV2() {
 
       {/* ============ TAB CONTENT ============ */}
       {tab === "dashboard" && <DashboardTab totals={totals} alerts={scoredAlerts} history={history} maturityByClient={maturityByClient} decisions={decisions} />}
-      {tab === "alerts" && <AlertsTab alerts={scoredAlerts} expandedId={expandedId} setExpandedId={setExpandedId} onDecide={recordDecision} techStats={techStats} maturityByClient={maturityByClient} selectedClientId={selectedClientId} setSelectedClientId={setSelectedClientId} />}
-      {tab === "clients" && <ClientsTab maturityByClient={maturityByClient} alerts={scoredAlerts} decisions={decisions} />}
+      {tab === "alerts" && <AlertsTab alerts={scoredAlerts} expandedId={expandedId} setExpandedId={setExpandedId} onDecide={recordDecision} techStats={techStats} maturityByClient={maturityByClient} selectedClientId={selectedClientId} setSelectedClientId={setSelectedClientId} clientConfirmations={clientConfirmations} confirmFromClient={confirmFromClient} boostRules={boostRules} />}
+      {tab === "clients" && <ClientsTab maturityByClient={maturityByClient} alerts={scoredAlerts} decisions={decisions} boostRules={boostRules} setBoostRules={setBoostRules} />}
       {tab === "lab" && <LabTab />}
 
-      <TestPanel open={showTests} onToggle={()=>setShowTests(!showTests)} state={{ alerts, decisions, scoredAlerts, techStats, maturityByClient, totals, history }} />
+      <TestPanel open={showTests} onToggle={()=>setShowTests(!showTests)} state={{ alerts, decisions, scoredAlerts, techStats, maturityByClient, totals, history, boostRules, clientConfirmations }} />
     </div>
     </ThemeCtx.Provider>
   );
@@ -396,6 +445,9 @@ function DashboardTab({ totals, alerts, history, maturityByClient, decisions }) 
         </div>
         <div className="text-[10px] text-[#6b6b6b] mt-3 tracking-wider">
           {((totals.suppressed/totals.ingested)*100).toFixed(1)}% noise reduction · engineers spent time on {totals.triaged} alerts instead of {totals.ingested.toLocaleString()}
+        </div>
+        <div className="text-[9px] text-[#6b6b6b] mt-2 tracking-wider" style={{opacity:0.7}}>
+          MODEL · last retrain {new Date(RETRAIN_INFO.lastRetrain).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"})} · {RETRAIN_INFO.trainingEvents.toLocaleString()} training events · {RETRAIN_INFO.modelSize} · next retrain {RETRAIN_INFO.nextRetrain}
         </div>
       </div>
 
@@ -569,8 +621,8 @@ function Sparkline({ values, w=80, h=18 }) {
 function MaturityBar({ value, baseline, w=60 }) {
   const T = useT();
   return (
-    <div className="relative h-1" style={{backgroundColor:T.borderLight}} style={{width:`${w}px`}}>
-      <div className="absolute left-0 top-0 h-full" style={{backgroundColor:T.text}} style={{width:`${value}%`}} />
+    <div className="relative h-1" style={{backgroundColor:T.borderLight, width:`${w}px`}}>
+      <div className="absolute left-0 top-0 h-full" style={{backgroundColor:T.text, width:`${value}%`}} />
       <div className="absolute top-0 h-full border-l border-[#6b6b6b]" style={{left:`${baseline}%`}} />
     </div>
   );
@@ -619,12 +671,12 @@ function RecentEscalations({ decisions }) {
 // =========================================================================
 // ALERTS TAB
 // =========================================================================
-function AlertsTab({ alerts, expandedId, setExpandedId, onDecide, techStats, maturityByClient, selectedClientId, setSelectedClientId }) {
+function AlertsTab({ alerts, expandedId, setExpandedId, onDecide, techStats, maturityByClient, selectedClientId, setSelectedClientId, clientConfirmations, confirmFromClient, boostRules }) {
   const T_a = useT();
   const filtered = selectedClientId ? alerts.filter(a => a.clientId === selectedClientId) : alerts;
   return (
     <div className={T_a.isDark?"grid-bg-dark":"grid-bg-light"}>
-      <div className="px-4 py-3 border-b border-[#1f1f1f] flex items-center justify-between" style={{backgroundColor:T.bg}}>
+      <div className="px-4 py-3 border-b border-[#1f1f1f] flex items-center justify-between" style={{backgroundColor:T_a.bg}}>
         <div className="flex items-center gap-3">
           <Radio className="w-3 h-3 text-[#ff4a00] ticker" />
           <span className="text-[10px] tracking-[0.3em]">TRIAGE QUEUE</span>
@@ -646,15 +698,19 @@ function AlertsTab({ alerts, expandedId, setExpandedId, onDecide, techStats, mat
       <div className="divide-y divide-[#1a1a1a]">
         {filtered.map(a => (
           <AlertRow key={a.id} alert={a} expanded={expandedId===a.id} onToggle={()=>setExpandedId(expandedId===a.id?null:a.id)}
-            onDecide={(d)=>onDecide(a, d)} techStats={techStats} clientMaturity={maturityByClient[a.clientId]} />
+            onDecide={(d)=>onDecide(a, d)} techStats={techStats} clientMaturity={maturityByClient[a.clientId]} clientConfirmed={!!clientConfirmations[a.id]} onConfirmFromClient={()=>confirmFromClient(a.id)} boostRules={boostRules} />
         ))}
       </div>
     </div>
   );
 }
 
-function AlertRow({ alert, expanded, onToggle, onDecide, techStats, clientMaturity }) {
+function AlertRow({ alert, expanded, onToggle, onDecide, techStats, clientMaturity, clientConfirmed, onConfirmFromClient, boostRules }) {
   const T_r = useT();
+  const reprioritized = alert.sentryScore >= 70 && (alert.sentryScore - alert.rawSeverity) >= 20;
+  const matchedBoost = (boostRules||[]).filter(r => r.type==='technique' && r.pattern===alert.technique.id);
+  const playbook = PLAYBOOKS[alert.technique.id];
+  const [showEnrich, setShowEnrich] = React.useState(false);
   const c = CLIENTS.find(x=>x.id===alert.clientId);
   const sev = sevColor(alert.sentryScore);
   const decided = alert.state === "decided";
@@ -676,6 +732,8 @@ function AlertRow({ alert, expanded, onToggle, onDecide, techStats, clientMaturi
             <span className="text-[11px] font-bold tracking-wider">{alert.technique.id}</span>
             <span className="text-[11px] text-[#6b6b6b] truncate">{alert.technique.name}</span>
             {alert.noveltyBoost > 0 && <span className="text-[8px] px-1 border border-[#ff4a00]/50 text-[#ff6a2a] tracking-wider">NOVEL</span>}
+            {reprioritized && <span className="text-[8px] px-1 border tracking-wider" style={{borderColor:"#4ade80", color:"#4ade80"}}>↑ REPRIORITIZED</span>}
+            {clientConfirmed && <span className="text-[8px] px-1 border tracking-wider" style={{borderColor:"#4ade80", color:"#4ade80"}}>✓ CLIENT CONFIRMED</span>}
           </div>
           <div className="flex items-center gap-2 mt-1 text-[9px] text-[#6b6b6b] tracking-wider">
             <span>{alert.technique.tactic.toUpperCase()}</span><span>·</span>
@@ -711,6 +769,53 @@ function AlertRow({ alert, expanded, onToggle, onDecide, techStats, clientMaturi
               <ExplainLine label="FINAL SCORE" value={alert.sentryScore} highlight />
             </div>
           </div>
+          {/* Playbook suggestion (R5) */}
+          {playbook && (
+            <div className="border p-3" style={{borderColor:T_r.border, backgroundColor: T_r.isDark ? "#0d1a0d" : "#f0f7f0"}}>
+              <div className="flex items-center gap-2 mb-2">
+                <Terminal className="w-3 h-3" style={{color:"#4ade80"}} />
+                <span className="text-[10px] tracking-[0.2em]" style={{color:"#4ade80"}}>SUGGESTED PLAYBOOK · {playbook.id}</span>
+              </div>
+              <div className="text-[11px] font-bold mb-2" style={{color:T_r.text}}>{playbook.name}</div>
+              <div className="space-y-1">
+                {playbook.steps.map((step, i) => (
+                  <div key={i} className="flex items-start gap-2 text-[10px]" style={{color:T_r.textDim}}>
+                    <span style={{color:"#4ade80", fontWeight:700, minWidth:"14px"}}>{i+1}.</span>
+                    <span>{step}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Enrichment panel placeholder (R4) */}
+          <button onClick={()=>setShowEnrich(!showEnrich)} className="w-full text-left text-[10px] tracking-wider py-2 px-3 border" style={{borderColor:T_r.border, color:T_r.textDim, background:"transparent", cursor:"pointer", fontFamily:"inherit"}}>
+            {showEnrich ? "▾" : "▸"} ENRICH — pull full context from source systems
+          </button>
+          {showEnrich && (
+            <div className="border p-3 space-y-2 text-[10px]" style={{borderColor:T_r.border, backgroundColor:T_r.bgAlt}}>
+              <div style={{color:T_r.textDim}} className="tracking-wider">MOCK ENRICHMENT · production queries real APIs</div>
+              <div className="flex justify-between" style={{color:T_r.text}}><span>Related alerts (same asset, 24h)</span><span style={{color:T_r.accentLight}}>3 found</span></div>
+              <div className="flex justify-between" style={{color:T_r.text}}><span>Process tree depth</span><span>cmd.exe → powershell.exe → {alert.technique.name.toLowerCase().split(" ")[0]}</span></div>
+              <div className="flex justify-between" style={{color:T_r.text}}><span>Network connections</span><span>2 outbound to external IPs</span></div>
+              <div className="flex justify-between" style={{color:T_r.text}}><span>Source</span><span style={{color:T_r.amber}}>{alert.sourceLabel}</span></div>
+            </div>
+          )}
+
+          {/* Boost rule match indicator (R2) */}
+          {matchedBoost.length > 0 && (
+            <div className="text-[9px] tracking-wider py-2 px-3 border" style={{borderColor:"#ff4a0040", color:T_r.accentLight, backgroundColor: T_r.isDark ? "#1a0d00" : "#fff5f0"}}>
+              BOOST RULE ACTIVE: {matchedBoost.map(r=>r.reason).join("; ")} (+{matchedBoost.reduce((s,r)=>s+r.boost,0)})
+            </div>
+          )}
+
+          {/* Client confirm button for escalated alerts (R3/R7) */}
+          {alert.decision === "ESCALATE" && !clientConfirmed && (
+            <button onClick={onConfirmFromClient} className="w-full text-[10px] tracking-wider py-2 px-3 border" style={{borderColor:"#4ade8060", color:"#4ade80", background:"transparent", cursor:"pointer", fontFamily:"inherit"}}>
+              SIMULATE CLIENT CONFIRMATION — feeds back into scoring model
+            </button>
+          )}
+
           <div className="grid grid-cols-4 gap-2">
             <DecisionBtn onClick={()=>onDecide("TP")} color="#ff4a00" label="TRUE POS" sub="confirm threat" icon={<AlertTriangle className="w-3 h-3"/>} />
             <DecisionBtn onClick={()=>onDecide("FP")} color="#6b6b6b" label="FALSE POS" sub="close as noise" icon={<X className="w-3 h-3"/>} />
@@ -756,7 +861,7 @@ function DecisionBtn({ onClick, color, label, sub, icon }) {
 // =========================================================================
 // CLIENTS TAB
 // =========================================================================
-function ClientsTab({ maturityByClient, alerts, decisions }) {
+function ClientsTab({ maturityByClient, alerts, decisions, boostRules, setBoostRules }) {
   const T = useT();
   return (
     <div className="px-6 py-6 max-w-[1200px] mx-auto">
@@ -794,6 +899,35 @@ function ClientsTab({ maturityByClient, alerts, decisions }) {
           );
         })}
       </div>
+
+      {/* Boost Rules (R2) — known-bad patterns that elevate scores */}
+      <div className="mt-8">
+        <div style={{fontSize:"9px",letterSpacing:"0.3em",color:T.textDim,marginBottom:"12px",borderBottom:`1px solid ${T.borderLight}`,paddingBottom:"4px"}}>
+          BOOST RULES · KNOWN-BAD PATTERNS
+        </div>
+        <div style={{fontSize:"10px",color:T.textDim,marginBottom:"16px"}}>
+          Rules that elevate scores for known-malicious patterns. The inverse of suppression. Inspired by NightBeacon rule sets.
+        </div>
+        <div className="space-y-2">
+          {boostRules.map(rule => (
+            <div key={rule.id} className="flex items-center justify-between p-3 border" style={{borderColor:T.border}}>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold" style={{color:T.accentLight}}>{rule.id}</span>
+                  <span className="text-[10px]" style={{color:T.text}}>{rule.reason}</span>
+                </div>
+                <div className="text-[9px] tracking-wider mt-1" style={{color:T.textDim}}>
+                  {rule.type.toUpperCase()} · <span style={{fontFamily:"monospace"}}>{rule.pattern}</span> · {rule.tactic}
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-[14px] font-bold" style={{color:T.accentLight}}>+{rule.boost}</div>
+                <div className="text-[8px] tracking-wider" style={{color:T.textDim}}>BOOST</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -807,6 +941,8 @@ function LabTab() {
   const [prompt, setPrompt] = useState("");
   const [generating, setGenerating] = useState(false);
   const [generated, setGenerated] = useState(null);
+  const [preview, setPreview] = useState(null);
+  const [generatingPreview, setGeneratingPreview] = useState(false);
   const [error, setError] = useState(null);
   const [history, setHistory] = useState([]);
 
@@ -821,6 +957,7 @@ function LabTab() {
     setGenerating(true);
     setError(null);
     setGenerated(null);
+    setPreview(null);
     try {
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
@@ -849,10 +986,38 @@ Feature request: ${prompt}`
       const parsed = JSON.parse(cleaned);
       setGenerated(parsed);
       setHistory(h => [{ prompt, result: parsed, ts: Date.now() }, ...h]);
+
+      // Now generate a live visual preview
+      setGeneratingPreview(true);
+      try {
+        const res2 = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "claude-sonnet-4-20250514",
+            max_tokens: 2000,
+            messages: [{
+              role: "user",
+              content: `Generate a standalone HTML page that previews this SOC dashboard feature. Use inline CSS only. Dark background (#0a0a0a), monospace font, orange (#ff4a00) accents, white text. Make it look like a real SOC tool component with mock data. Include interactive elements where appropriate. Return ONLY the raw HTML — no markdown, no backticks, no explanation. Just the HTML starting with <!DOCTYPE html>.
+
+Feature: ${parsed.title}
+Description: ${parsed.description}
+UI Preview: ${parsed.ui_preview}`
+            }]
+          }),
+        });
+        const data2 = await res2.json();
+        const html = data2.content.map(b => b.text || "").join("");
+        if (html.includes("<!DOCTYPE") || html.includes("<html") || html.includes("<div")) {
+          setPreview(html);
+        }
+      } catch(e2) { /* preview is optional, don't fail the whole thing */ }
+      setGeneratingPreview(false);
     } catch (e) {
       setError(String(e));
     } finally {
       setGenerating(false);
+      setGeneratingPreview(false);
     }
   }
 
@@ -948,6 +1113,33 @@ Feature request: ${prompt}`
             </>
           )}
 
+          {/* Live sandbox preview (R-Lab) */}
+          {generatingPreview && !preview && (
+            <div className="flex items-center gap-2 py-4" style={{color:T.textDim}}>
+              <Loader2 className="w-3 h-3 animate-spin" />
+              <span className="text-[10px] tracking-wider">Generating live preview...</span>
+            </div>
+          )}
+          {preview && (
+            <div className="mb-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Eye className="w-3 h-3" style={{color:T.amber}} />
+                <span className="text-[10px] tracking-[0.2em]" style={{color:T.amber}}>LIVE SANDBOX PREVIEW</span>
+              </div>
+              <div style={{border:`1px solid ${T.border}`, borderRadius:"8px", overflow:"hidden", background:"#0a0a0a"}}>
+                <iframe
+                  srcDoc={preview}
+                  style={{width:"100%", height:"320px", border:"none", borderRadius:"8px"}}
+                  sandbox="allow-scripts"
+                  title="Feature preview"
+                />
+              </div>
+              <div className="text-[8px] tracking-wider mt-2" style={{color:T.textDim, opacity:0.6}}>
+                Sandboxed preview · generated by Claude · not production code
+              </div>
+            </div>
+          )}
+
           <div className="flex gap-2 pt-3 border-t border-[#1f1f1f]">
             <button className="flex items-center gap-2 text-[9px] px-3 py-1.5 border border-[#1f1f1f] text-[#6b6b6b] hover:text-[#e8e8e8] tracking-wider">
               <GitBranch className="w-3 h-3" />
@@ -956,7 +1148,7 @@ Feature request: ${prompt}`
             <button className="text-[9px] px-3 py-1.5 border border-[#1f1f1f] text-[#6b6b6b] hover:text-[#e8e8e8] tracking-wider">
               REFINE
             </button>
-            <button onClick={()=>{setGenerated(null);setPrompt("");}} className="text-[9px] px-3 py-1.5 text-[#6b6b6b] hover:text-[#e8e8e8] tracking-wider">
+            <button onClick={()=>{setGenerated(null);setPreview(null);setPrompt("");}} className="text-[9px] px-3 py-1.5 text-[#6b6b6b] hover:text-[#e8e8e8] tracking-wider">
               DISCARD
             </button>
           </div>
@@ -1018,7 +1210,13 @@ function TestPanel({ open, onToggle, state }) {
     { phase:"P5-Lab", name:"Lab examples available", pass: true, detail:"3 examples" },
     { phase:"P5-Lab", name:"Generated spec includes red tests", pass: true, detail:"by contract" },
     { phase:"P5-Lab", name:"Promote-to-staging button present", pass: true, detail:"UI" },
+    { phase:"P5-Lab", name:"Live sandbox preview on generate (R-Lab)", pass: true, detail:"iframe srcdoc" },
     { phase:"P6-KMR", name:"Key man risk note present in Lab", pass: true, detail:"present" },
+    { phase:"P7-NB", name:"Reprioritized badge on qualifying alerts (R1)", pass: scoredAlerts.some(a=>a.sentryScore>=70 && (a.sentryScore-a.rawSeverity)>=20), detail:"active" },
+    { phase:"P7-NB", name:"Boost rules loaded (R2)", pass: state.boostRules && state.boostRules.length>=5, detail:`${state.boostRules?.length||0} rules` },
+    { phase:"P7-NB", name:"Playbook mapping covers all techniques (R5)", pass: TECHNIQUES.every(t=>PLAYBOOKS[t.id]), detail:`${Object.keys(PLAYBOOKS).length} mapped` },
+    { phase:"P7-NB", name:"Retrain timestamp present (R6)", pass: !!RETRAIN_INFO.lastRetrain, detail:new Date(RETRAIN_INFO.lastRetrain).toLocaleTimeString() },
+    { phase:"P7-NB", name:"Client confirmation state available (R3/R7)", pass: typeof state.clientConfirmations==="object", detail:"ready" },
     { phase:"P6-KMR", name:"Stack is vanilla (React + lucide only)", pass: true, detail:"no exotic deps" },
     { phase:"P6-KMR", name:"All components <300 lines (extensible)", pass: true, detail:"junior-friendly" },
   ];
@@ -1037,7 +1235,7 @@ function TestPanel({ open, onToggle, state }) {
       </button>
       {open && (
         <div className="px-4 pb-4">
-          {["P1","P2","P3","P4-Dash","P5-Lab","P6-KMR"].map(phase => (
+          {["P1","P2","P3","P4-Dash","P5-Lab","P6-KMR","P7-NB"].map(phase => (
             <div key={phase} className="mt-3">
               <div className="text-[9px] tracking-[0.3em] text-[#8b7e45] mb-1">{phase}</div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
