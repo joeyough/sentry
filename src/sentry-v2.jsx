@@ -2,7 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from "react";
 import {
   Shield, Activity, AlertTriangle, Check, X, ArrowUpRight, Users, Zap,
   ChevronRight, ChevronDown, Clock, Eye, Terminal, Radio, LayoutDashboard,
-  FlaskConical, Building2, Send, Loader2, GitBranch, Sparkles
+  FlaskConical, Building2, Send, Loader2, GitBranch, Sparkles, Sun, Moon
 } from "lucide-react";
 
 /* =========================================================================
@@ -19,6 +19,43 @@ import {
 
    TDD panel at bottom. ~24 assertions, live.
    ========================================================================= */
+
+
+// =========================================================================
+// THEME
+// =========================================================================
+const ThemeCtx = React.createContext(null);
+function useT() { return React.useContext(ThemeCtx); }
+
+function makeTheme(isDark) {
+  return isDark ? {
+    bg: "#0a0a0a", bgAlt: "#0c0c0c", bgHi: "#111",
+    text: "#e8e8e8", textDim: "#6b6b6b", textMid: "#8b8b8b",
+    border: "#1f1f1f", borderLight: "#1a1a1a",
+    accent: "#ff4a00", accentLight: "#ff6a2a",
+    amber: "#e89200", gold: "#8b7e45", green: "#4ade80",
+    warn: "#d97a00",
+    sparkStroke: "#e8e8e8",
+    barFill: "#e8e8e8",
+    shadow: "0 4px 20px rgba(0,0,0,0.5)",
+    gridA: "rgba(255,255,255,0.022)",
+    hoverBg: "rgba(255,255,255,0.02)",
+    isDark: true,
+  } : {
+    bg: "#f8f7f4", bgAlt: "#ffffff", bgHi: "#f2f0eb",
+    text: "#1a1816", textDim: "#7a756d", textMid: "#5a5650",
+    border: "#e2dfda", borderLight: "#eae7e2",
+    accent: "#d94400", accentLight: "#e85a1a",
+    amber: "#b87800", gold: "#8b7e45", green: "#2d8a4e",
+    warn: "#b86800",
+    sparkStroke: "#1a1816",
+    barFill: "#1a1816",
+    shadow: "0 4px 20px rgba(0,0,0,0.08)",
+    gridA: "rgba(0,0,0,0.035)",
+    hoverBg: "rgba(0,0,0,0.02)",
+    isDark: false,
+  };
+}
 
 // =========================================================================
 // DATA
@@ -173,6 +210,17 @@ export default function SentryV2() {
   const [selectedClientId, setSelectedClientId] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
   const [showTests, setShowTests] = useState(false);
+  const [theme, setTheme] = useState("auto");
+  const [systemDark, setSystemDark] = useState(true);
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    setSystemDark(mq.matches);
+    const h = (e) => setSystemDark(e.matches);
+    mq.addEventListener?.("change", h);
+    return () => mq.removeEventListener?.("change", h);
+  }, []);
+  const isDark = theme === "auto" ? systemDark : theme === "dark";
+  const T = makeTheme(isDark);
 
   const techStats = useMemo(()=>computeTechStats(decisions), [decisions]);
   const maturityByClient = useMemo(()=>{
@@ -220,21 +268,28 @@ export default function SentryV2() {
   }, [alerts, decisions, scoredAlerts]);
 
   return (
-    <div className="min-h-screen text-[#e8e8e8]" style={{fontFamily:"'JetBrains Mono', ui-monospace, monospace", backgroundColor:'#0a0a0a', color:'#e8e8e8'}}>
+    <ThemeCtx.Provider value={T}>
+    <div className="min-h-screen" style={{fontFamily:"'JetBrains Mono', ui-monospace, monospace", backgroundColor:T.bg, color:T.text, transition:"background-color 0.3s, color 0.3s"}}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@200;300;400;500;700&display=swap');
         .ticker { animation: tick 1.2s ease-in-out infinite; }
         @keyframes tick { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
-        .grid-bg {
+        .grid-bg-dark {
           background-image:
             linear-gradient(to right, rgba(255,255,255,0.022) 1px, transparent 1px),
             linear-gradient(to bottom, rgba(255,255,255,0.022) 1px, transparent 1px);
           background-size: 40px 40px;
         }
+        .grid-bg-light {
+          background-image:
+            linear-gradient(to right, rgba(0,0,0,0.035) 1px, transparent 1px),
+            linear-gradient(to bottom, rgba(0,0,0,0.035) 1px, transparent 1px);
+          background-size: 40px 40px;
+        }
       `}</style>
 
       {/* ============ TOP BAR ============ */}
-      <div className="border-b border-[#1f1f1f] sticky top-0 z-20" style={{backgroundColor:'#0a0a0a', boxShadow:'0 4px 20px rgba(0,0,0,0.5)'}}>
+      <div className="border-b border-[#1f1f1f] sticky top-0 z-20" style={{backgroundColor:T.bg, boxShadow:T.shadow, transition:'background-color 0.3s'}}>
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-3">
             <div className="w-7 h-7 border border-[#ff4a00] flex items-center justify-center">
@@ -254,10 +309,23 @@ export default function SentryV2() {
             <div><span className="text-[#6b6b6b]">TRIAGED </span><span>{totals.triaged}</span></div>
             <div><span className="text-[#6b6b6b]">SLA </span><span>&lt;60m</span></div>
           </div>
-          <button onClick={undoLast} disabled={decisions.length===0}
-            className="text-[10px] tracking-wider px-2 py-1 border border-[#2a2a2a] text-[#6b6b6b] hover:text-[#e8e8e8] disabled:opacity-30">
-            UNDO
-          </button>
+          <div className="flex items-center gap-2">
+            {["auto","light","dark"].map(m => (
+              <button key={m} onClick={()=>setTheme(m)}
+                style={{
+                  fontSize:"9px",letterSpacing:"0.1em",textTransform:"uppercase",
+                  padding:"3px 8px",borderRadius:"999px",cursor:"pointer",fontFamily:"inherit",
+                  background: theme===m ? (isDark?"#222":"#e8e8e8") : "transparent",
+                  color: theme===m ? T.text : T.textDim,
+                  border: theme===m ? `1px solid ${T.border}` : "1px solid transparent",
+                }}>{m}</button>
+            ))}
+            <button onClick={undoLast} disabled={decisions.length===0}
+              style={{fontSize:"10px",letterSpacing:"0.1em",padding:"3px 8px",cursor:"pointer",fontFamily:"inherit",
+                border:`1px solid ${T.border}`,color:T.textDim,background:"transparent",opacity:decisions.length===0?0.3:1}}>
+              UNDO
+            </button>
+          </div>
         </div>
 
         {/* Tabs */}
@@ -272,9 +340,14 @@ export default function SentryV2() {
             const active = tab === t.id;
             return (
               <button key={t.id} onClick={()=>setTab(t.id)}
-                className={`flex items-center gap-2 px-4 py-2.5 text-[10px] tracking-[0.2em] border-r border-[#1f1f1f] ${
-                  active ? "text-[#ff6a2a] border-b border-b-[#ff4a00] bg-[#0c0c0c]" : "text-[#6b6b6b] hover:text-[#e8e8e8]"
-                }`}>
+                style={{
+                  display:"flex",alignItems:"center",gap:"8px",padding:"10px 16px",
+                  fontSize:"10px",letterSpacing:"0.2em",cursor:"pointer",fontFamily:"inherit",
+                  borderRight:`1px solid ${T.border}`,
+                  borderBottom: active ? `1px solid ${T.accent}` : "1px solid transparent",
+                  background: active ? T.bgAlt : "transparent",
+                  color: active ? T.accentLight : T.textDim,
+                }}>>
                 <Ico className="w-3 h-3" />
                 {t.label}
                 {t.id==="alerts" && totals.open>0 && (
@@ -297,6 +370,7 @@ export default function SentryV2() {
 
       <TestPanel open={showTests} onToggle={()=>setShowTests(!showTests)} state={{ alerts, decisions, scoredAlerts, techStats, maturityByClient, totals, history }} />
     </div>
+    </ThemeCtx.Provider>
   );
 }
 
@@ -304,6 +378,7 @@ export default function SentryV2() {
 // DASHBOARD TAB — Tufte-style. Sparklines, small multiples, horizon chart.
 // =========================================================================
 function DashboardTab({ totals, alerts, history, maturityByClient, decisions }) {
+  const T = useT();
   // The single sentence at the top — the "exec summary"
   const breachWord = totals.breaches === 0 ? "0 SLA breaches" : `${totals.breaches} SLA breaches`;
 
@@ -375,9 +450,10 @@ function DashboardTab({ totals, alerts, history, maturityByClient, decisions }) 
 }
 
 function Section({ label, children }) {
+  const T = useT();
   return (
     <div className="mb-8">
-      <div className="text-[9px] tracking-[0.3em] text-[#6b6b6b] mb-3 border-b border-[#1a1a1a] pb-1">{label}</div>
+      <div style={{fontSize:"9px",letterSpacing:"0.3em",color:T.textDim,marginBottom:"12px",borderBottom:`1px solid ${T.borderLight}`,paddingBottom:"4px"}}>{label}</div>
       {children}
     </div>
   );
@@ -386,6 +462,7 @@ function Section({ label, children }) {
 // ----- HORIZON CHART -----
 // Tufte-style: ribbon of color, bands stacked, packs ~5x density of a line
 function HorizonChart({ history }) {
+  const T = useT();
   // Sum across clients per hour for last 24h (last day in history)
   const hours = Array.from({length:24}, (_,h)=>{
     return CLIENTS.reduce((sum,c)=> sum + (history[c.id][6][h]||0), 0);
@@ -416,6 +493,7 @@ function HorizonChart({ history }) {
 
 // ----- DENSE CLIENT TABLE w/ sparklines -----
 function ClientTable({ history, maturityByClient, alerts, decisions }) {
+  const T = useT();
   return (
     <div className="border border-[#1f1f1f]">
       <div className="grid grid-cols-12 gap-2 px-3 py-2 border-b border-[#1f1f1f] text-[9px] tracking-[0.2em] text-[#6b6b6b]">
@@ -465,6 +543,7 @@ function ClientTable({ history, maturityByClient, alerts, decisions }) {
 
 // ----- SPARKLINE (Tufte's invention) -----
 function Sparkline({ values, w=80, h=18 }) {
+  const T = useT();
   const max = Math.max(...values);
   const min = Math.min(...values);
   const range = max - min || 1;
@@ -475,7 +554,7 @@ function Sparkline({ values, w=80, h=18 }) {
   }).join(" ");
   return (
     <svg width={w} height={h} className="overflow-visible">
-      <polyline points={points} fill="none" stroke="#e8e8e8" strokeWidth="1" />
+      <polyline points={points} fill="none" stroke={T.sparkStroke} strokeWidth="1" />
       {/* End-point dot — Tufte's recommended marker */}
       <circle
         cx={w}
@@ -488,9 +567,10 @@ function Sparkline({ values, w=80, h=18 }) {
 }
 
 function MaturityBar({ value, baseline, w=60 }) {
+  const T = useT();
   return (
-    <div className="relative h-1 bg-[#1a1a1a]" style={{width:`${w}px`}}>
-      <div className="absolute left-0 top-0 h-full bg-[#e8e8e8]" style={{width:`${value}%`}} />
+    <div className="relative h-1" style={{backgroundColor:T.borderLight}} style={{width:`${w}px`}}>
+      <div className="absolute left-0 top-0 h-full" style={{backgroundColor:T.text}} style={{width:`${value}%`}} />
       <div className="absolute top-0 h-full border-l border-[#6b6b6b]" style={{left:`${baseline}%`}} />
     </div>
   );
@@ -498,13 +578,14 @@ function MaturityBar({ value, baseline, w=60 }) {
 
 // ----- SMALL MULTIPLE -----
 function SmallMultiple({ client, hours }) {
+  const T = useT();
   const max = Math.max(...hours);
   return (
     <div className="border border-[#1f1f1f] p-3">
       <div className="text-[9px] tracking-[0.2em] text-[#6b6b6b] mb-2">{client.name.toUpperCase()}</div>
       <div className="flex items-end h-10 gap-[1px]">
         {hours.map((v,i)=>(
-          <div key={i} className="flex-1 bg-[#e8e8e8]" style={{height:`${(v/max)*100}%`, opacity: 0.3 + (v/max)*0.7}} />
+          <div key={i} style={{flex:1, backgroundColor:T.barFill, height:`${(v/max)*100}%`, opacity: 0.3 + (v/max)*0.7}} />
         ))}
       </div>
       <div className="flex justify-between text-[8px] text-[#6b6b6b] mt-1 tracking-wider">
@@ -516,6 +597,7 @@ function SmallMultiple({ client, hours }) {
 
 // ----- RECENT ESCALATIONS -----
 function RecentEscalations({ decisions }) {
+  const T = useT();
   const escs = decisions.filter(d => d.decision === "ESCALATE").slice(0, 5);
   if (escs.length === 0) {
     return <div className="text-[10px] text-[#6b6b6b] italic py-2">no escalations yet — every alert is being held by the auto-suppression layer or sitting in queue</div>;
@@ -538,10 +620,11 @@ function RecentEscalations({ decisions }) {
 // ALERTS TAB
 // =========================================================================
 function AlertsTab({ alerts, expandedId, setExpandedId, onDecide, techStats, maturityByClient, selectedClientId, setSelectedClientId }) {
+  const T_a = useT();
   const filtered = selectedClientId ? alerts.filter(a => a.clientId === selectedClientId) : alerts;
   return (
-    <div className="grid-bg">
-      <div className="px-4 py-3 border-b border-[#1f1f1f] flex items-center justify-between" style={{backgroundColor:'#0a0a0a'}}>
+    <div className={T_a.isDark?"grid-bg-dark":"grid-bg-light"}>
+      <div className="px-4 py-3 border-b border-[#1f1f1f] flex items-center justify-between" style={{backgroundColor:T.bg}}>
         <div className="flex items-center gap-3">
           <Radio className="w-3 h-3 text-[#ff4a00] ticker" />
           <span className="text-[10px] tracking-[0.3em]">TRIAGE QUEUE</span>
@@ -571,6 +654,7 @@ function AlertsTab({ alerts, expandedId, setExpandedId, onDecide, techStats, mat
 }
 
 function AlertRow({ alert, expanded, onToggle, onDecide, techStats, clientMaturity }) {
+  const T_r = useT();
   const c = CLIENTS.find(x=>x.id===alert.clientId);
   const sev = sevColor(alert.sentryScore);
   const decided = alert.state === "decided";
@@ -604,7 +688,7 @@ function AlertRow({ alert, expanded, onToggle, onDecide, techStats, clientMaturi
           : expanded ? <ChevronDown className="w-4 h-4 text-[#6b6b6b]" /> : <ChevronRight className="w-4 h-4 text-[#6b6b6b]" />}
       </div>
       {expanded && !decided && (
-        <div className="border-t border-[#1a1a1a] px-4 py-4 space-y-3" style={{backgroundColor:"#0c0c0c"}}>
+        <div className="border-t border-[#1a1a1a] px-4 py-4 space-y-3" style={{backgroundColor:T_r.bgAlt}}>
           <div className="grid grid-cols-2 gap-3 text-[10px]">
             <Field label="ALERT ID" value={alert.id} />
             <Field label="RULE" value={alert.rule} />
@@ -613,7 +697,7 @@ function AlertRow({ alert, expanded, onToggle, onDecide, techStats, clientMaturi
             <Field label="SOURCE" value={alert.sourceLabel} />
             <Field label="DEDUPE COUNT" value={`×${alert.dedupeCount}`} />
           </div>
-          <div className="border border-[#1f1f1f] p-3" style={{backgroundColor:"#0a0a0a"}}>
+          <div className="border border-[#1f1f1f] p-3" style={{backgroundColor:T_r.bg}}>
             <div className="flex items-center gap-2 mb-2">
               <Eye className="w-3 h-3 text-[#8b7e45]" />
               <span className="text-[10px] tracking-[0.2em] text-[#8b7e45]">WHY THIS SCORE</span>
@@ -640,6 +724,7 @@ function AlertRow({ alert, expanded, onToggle, onDecide, techStats, clientMaturi
 }
 
 function Field({ label, value }) {
+  const T = useT();
   return (
     <div>
       <div className="text-[#6b6b6b] tracking-wider mb-0.5">{label}</div>
@@ -648,6 +733,7 @@ function Field({ label, value }) {
   );
 }
 function ExplainLine({ label, value, highlight }) {
+  const T = useT();
   return (
     <div className="flex justify-between">
       <span className="text-[#6b6b6b]">{label}</span>
@@ -656,6 +742,7 @@ function ExplainLine({ label, value, highlight }) {
   );
 }
 function DecisionBtn({ onClick, color, label, sub, icon }) {
+  const T = useT();
   return (
     <button onClick={onClick} className="flex flex-col items-center justify-center gap-1 border py-3 px-2 hover:bg-white/5"
       style={{borderColor: color+"66", color}}>
@@ -670,6 +757,7 @@ function DecisionBtn({ onClick, color, label, sub, icon }) {
 // CLIENTS TAB
 // =========================================================================
 function ClientsTab({ maturityByClient, alerts, decisions }) {
+  const T = useT();
   return (
     <div className="px-6 py-6 max-w-[1200px] mx-auto">
       <div className="text-[9px] tracking-[0.3em] text-[#6b6b6b] mb-4 border-b border-[#1a1a1a] pb-1">CLIENT PORTFOLIO</div>
@@ -715,6 +803,7 @@ function ClientsTab({ maturityByClient, alerts, decisions }) {
 // via the Anthropic API. The "key man risk killer" demo.
 // =========================================================================
 function LabTab() {
+  const T = useT();
   const [prompt, setPrompt] = useState("");
   const [generating, setGenerating] = useState(false);
   const [generated, setGenerated] = useState(null);
@@ -905,6 +994,7 @@ Feature request: ${prompt}`
 // TEST PANEL
 // =========================================================================
 function TestPanel({ open, onToggle, state }) {
+  const T = useT();
   const { alerts, decisions, scoredAlerts, techStats, maturityByClient, totals, history } = state;
   const tests = [
     { phase:"P1", name:"3 clients loaded", pass: CLIENTS.length===3, detail:`${CLIENTS.length}` },
@@ -936,7 +1026,7 @@ function TestPanel({ open, onToggle, state }) {
   const allGreen = passing===tests.length;
 
   return (
-    <div className="border-t border-[#1f1f1f] bg-[#080808]">
+    <div style={{borderTop:`1px solid ${T.border}`, backgroundColor: T.isDark ? "#080808" : "#ffffff"}}>
       <button onClick={onToggle} className="w-full px-4 py-3 flex items-center justify-between hover:bg-white/5">
         <div className="flex items-center gap-3">
           <div className={`w-2 h-2 rounded-full ${allGreen?"bg-[#4ade80]":"bg-[#ff4a00]"} ticker`} />
