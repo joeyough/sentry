@@ -318,7 +318,7 @@ export default function SentryV2() {
 
   return (
     <ThemeCtx.Provider value={T}>
-    <div className="min-h-screen" style={{fontFamily:"'JetBrains Mono', ui-monospace, monospace", backgroundColor:T.bg, color:T.text, transition:"background-color 0.3s, color 0.3s"}}>
+    <div className="min-h-screen" style={{fontFamily:"'JetBrains Mono', ui-monospace, monospace", backgroundColor:T.bg, color:T.text, transition:"background-color 0.3s, color 0.3s", overflowX:"hidden"}}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@200;300;400;500;700&display=swap');
         .ticker { animation: tick 1.2s ease-in-out infinite; }
@@ -334,6 +334,10 @@ export default function SentryV2() {
             linear-gradient(to right, rgba(0,0,0,0.035) 1px, transparent 1px),
             linear-gradient(to bottom, rgba(0,0,0,0.035) 1px, transparent 1px);
           background-size: 40px 40px;
+        }
+        @media (max-width: 640px) {
+          .tab-label { display: none !important; }
+          .theme-toggle { display: none !important; }
         }
       `}</style>
 
@@ -360,7 +364,7 @@ export default function SentryV2() {
           </div>
           <div className="flex items-center gap-2">
             {["auto","light","dark"].map(m => (
-              <button key={m} onClick={()=>setTheme(m)}
+              <button key={m} onClick={()=>setTheme(m)} className="theme-toggle"
                 style={{
                   fontSize:"9px",letterSpacing:"0.1em",textTransform:"uppercase",
                   padding:"3px 8px",borderRadius:"999px",cursor:"pointer",fontFamily:"inherit",
@@ -377,8 +381,8 @@ export default function SentryV2() {
           </div>
         </div>
 
-        {/* Tabs */}
-        <div className="flex border-t border-[#1f1f1f]">
+        {/* Tabs — icons only on mobile, icon+label on desktop */}
+        <div style={{display:"flex", borderTop:`1px solid ${T.border}`}}>
           {[
             { id:"dashboard", label:"DASHBOARD", icon:LayoutDashboard },
             { id:"alerts", label:"ALERTS", icon:Radio },
@@ -390,20 +394,22 @@ export default function SentryV2() {
             return (
               <button key={t.id} onClick={()=>setTab(t.id)}
                 style={{
-                  display:"flex",alignItems:"center",gap:"8px",padding:"10px 16px",
-                  fontSize:"10px",letterSpacing:"0.2em",cursor:"pointer",fontFamily:"inherit",
+                  flex:1, display:"flex",alignItems:"center",justifyContent:"center",gap:"6px",
+                  padding:"10px 4px",
+                  fontSize:"10px",letterSpacing:"0.15em",cursor:"pointer",fontFamily:"inherit",
                   borderRight:`1px solid ${T.border}`,
-                  borderBottom: active ? `1px solid ${T.accent}` : "1px solid transparent",
+                  borderBottom: active ? `2px solid ${T.accent}` : "2px solid transparent",
                   background: active ? T.bgAlt : "transparent",
                   color: active ? T.accentLight : T.textDim,
-                }}>>
-                <Ico className="w-3 h-3" />
-                {t.label}
+                  position:"relative",
+                }}>
+                <Ico style={{width:"14px",height:"14px",flexShrink:0}} />
+                <span className="tab-label">{t.label}</span>
                 {t.id==="alerts" && totals.open>0 && (
-                  <span className="text-[#ff6a2a]">{totals.open}</span>
+                  <span style={{color:T.accentLight,fontSize:"10px"}}>{totals.open}</span>
                 )}
                 {t.id==="lab" && (
-                  <span className="text-[8px] px-1 border border-[#ff4a00]/40 text-[#ff6a2a] tracking-wider">BETA</span>
+                  <span className="tab-label" style={{fontSize:"8px",padding:"1px 4px",border:`1px solid ${T.accent}40`,color:T.accentLight,letterSpacing:"0.1em"}}>BETA</span>
                 )}
               </button>
             );
@@ -952,12 +958,104 @@ function LabTab() {
     "Create a button that bulk-suppresses all FALSE POS alerts older than 24 hours",
   ];
 
+  // Mock spec generator — used when API is unavailable (CORS on deployed sites)
+  function mockSpec(input) {
+    const lower = input.toLowerCase();
+    if (lower.includes("column") || lower.includes("similar") || lower.includes("asset")) {
+      return {
+        title: "Related Alert Count Column",
+        description: "Adds a column showing the count of similar alerts from the same asset in the last hour.",
+        tests: [
+          "Column renders for every alert row in the triage queue",
+          "Count updates in real-time as new alerts arrive for the same asset",
+          "Clicking the count expands to show the related alert IDs and timestamps"
+        ],
+        ui_preview: "A new column labeled 'RELATED' appears between the asset name and the timestamp. It shows a number badge (e.g., '×4') in amber when count > 1. Clicking it opens an inline panel listing each related alert.",
+        risk_notes: "No compliance impact. Read-only aggregation of existing data. Consider caching the count to avoid re-scanning on every render."
+      };
+    }
+    if (lower.includes("noisi") || lower.includes("top") || lower.includes("widget")) {
+      return {
+        title: "Noisiest Rules Widget",
+        description: "Dashboard widget showing the top 5 rules generating the most false positives across all clients.",
+        tests: [
+          "Widget renders on the Dashboard tab below the sparklines section",
+          "Rules are ranked by FP count descending, updated live from the decision log",
+          "Each rule row shows: rule name, client, FP count, last triggered time"
+        ],
+        ui_preview: "A compact table with 5 rows. Each row has a horizontal bar showing relative noise level in amber. The noisiest rule has the full bar. A 'CREATE SUPPRESSION' button appears on hover for each rule.",
+        risk_notes: "Suppression rules created from this widget should require analyst confirmation. Auto-suppression without review could mask real threats."
+      };
+    }
+    if (lower.includes("bulk") || lower.includes("suppress") || lower.includes("false pos")) {
+      return {
+        title: "Bulk Suppression Action",
+        description: "Button that bulk-suppresses all FALSE POS alerts older than 24 hours with one click.",
+        tests: [
+          "Button appears in the alerts tab toolbar when FP alerts older than 24h exist",
+          "Clicking shows a confirmation modal with the count of alerts to be suppressed",
+          "After confirmation, all matching alerts move to 'decided' state with decision 'FP'"
+        ],
+        ui_preview: "An amber button labeled 'SUPPRESS OLD FPs (12)' appears in the filter bar. The number updates live. Clicking opens a modal: 'Suppress 12 false positives older than 24h? This creates suppression rules for each pattern.' Two buttons: CONFIRM / CANCEL.",
+        risk_notes: "Bulk actions should be logged in the audit trail. Consider requiring two-person integrity for bulk suppressions over 20 alerts, consistent with the escalation flow."
+      };
+    }
+    return {
+      title: "Custom Feature: " + input.split(" ").slice(0, 4).join(" "),
+      description: "A feature that " + input.charAt(0).toLowerCase() + input.slice(1).replace(/\.$/, "") + ".",
+      tests: [
+        "Feature renders correctly in the appropriate tab",
+        "Feature updates state without breaking existing triage flow",
+        "Feature is visible in both light and dark themes"
+      ],
+      ui_preview: "A new UI component appears in the relevant section of Sentry, styled consistently with the existing design system (monospace, dark/light theme aware, orange accents for actions).",
+      risk_notes: "Review with VDA engineering lead before promoting to production. Ensure the change is documented in BUS_FACTOR.md."
+    };
+  }
+
+  function mockPreviewHtml(spec) {
+    return `<!DOCTYPE html><html><head><style>
+      * { margin:0; padding:0; box-sizing:border-box; }
+      body { background:#0a0a0a; color:#e8e8e8; font-family:'Courier New',monospace; padding:24px; }
+      h2 { font-size:14px; letter-spacing:0.2em; color:#ff6a2a; text-transform:uppercase; margin-bottom:16px; }
+      .card { border:1px solid #1f1f1f; padding:16px; margin-bottom:12px; }
+      .label { font-size:10px; letter-spacing:0.15em; color:#6b6b6b; text-transform:uppercase; margin-bottom:6px; }
+      .value { font-size:18px; font-weight:bold; color:#e8e8e8; }
+      .row { display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid #1a1a1a; font-size:12px; }
+      .accent { color:#ff6a2a; }
+      .green { color:#4ade80; }
+      .bar { height:6px; background:#1a1a1a; margin-top:6px; border-radius:3px; overflow:hidden; }
+      .bar-fill { height:100%; background:#ff4a00; border-radius:3px; }
+      .btn { border:1px solid #ff4a00; color:#ff6a2a; background:none; padding:8px 16px; font-size:11px; letter-spacing:0.1em; cursor:pointer; margin-top:12px; font-family:inherit; }
+      .btn:hover { background:#ff4a0015; }
+    </style></head><body>
+      <h2>${spec.title}</h2>
+      <div class="card">
+        <div class="label">Preview</div>
+        <div style="font-size:12px;color:#8b8b8b;margin-bottom:16px">${spec.ui_preview}</div>
+        <div class="row"><span>sig.t1059_001.447</span><span>ASPEN HOLDINGS</span><span class="accent">x4</span></div>
+        <div class="row"><span>sig.t1003_001.812</span><span>MERIDIAN CLINIC</span><span class="accent">x7</span></div>
+        <div class="row"><span>sig.t1078_203</span><span>FORGEWORKS MFG</span><span class="accent">x2</span></div>
+        <div class="bar"><div class="bar-fill" style="width:78%"></div></div>
+        <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:10px;color:#6b6b6b">
+          <span>FP Rate: <span class="accent">34%</span></span>
+          <span class="green">3 rules active</span>
+        </div>
+        <button class="btn" onclick="this.textContent='Applied'">APPLY</button>
+      </div>
+      <div style="font-size:9px;color:#6b6b6b;margin-top:16px;letter-spacing:0.1em">SANDBOX PREVIEW · NOT PRODUCTION CODE</div>
+    </body></html>`;
+  }
+
   async function generate() {
     if (!prompt.trim()) return;
     setGenerating(true);
     setError(null);
     setGenerated(null);
     setPreview(null);
+
+    // Try API first (works in Claude Artifacts), fall back to mock (works on Netlify)
+    let spec = null;
     try {
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
@@ -983,46 +1081,51 @@ Feature request: ${prompt}`
       const data = await res.json();
       const text = data.content.map(b => b.text || "").join("");
       const cleaned = text.replace(/```json|```/g, "").trim();
-      const parsed = JSON.parse(cleaned);
-      setGenerated(parsed);
-      setHistory(h => [{ prompt, result: parsed, ts: Date.now() }, ...h]);
-
-      // Now generate a live visual preview
-      setGeneratingPreview(true);
-      try {
-        const res2 = await fetch("https://api.anthropic.com/v1/messages", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            model: "claude-sonnet-4-20250514",
-            max_tokens: 2000,
-            messages: [{
-              role: "user",
-              content: `Generate a standalone HTML page that previews this SOC dashboard feature. Use inline CSS only. Dark background (#0a0a0a), monospace font, orange (#ff4a00) accents, white text. Make it look like a real SOC tool component with mock data. Include interactive elements where appropriate. Return ONLY the raw HTML — no markdown, no backticks, no explanation. Just the HTML starting with <!DOCTYPE html>.
-
-Feature: ${parsed.title}
-Description: ${parsed.description}
-UI Preview: ${parsed.ui_preview}`
-            }]
-          }),
-        });
-        const data2 = await res2.json();
-        const html = data2.content.map(b => b.text || "").join("");
-        if (html.includes("<!DOCTYPE") || html.includes("<html") || html.includes("<div")) {
-          setPreview(html);
-        }
-      } catch(e2) { /* preview is optional, don't fail the whole thing */ }
-      setGeneratingPreview(false);
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setGenerating(false);
-      setGeneratingPreview(false);
+      spec = JSON.parse(cleaned);
+    } catch (apiErr) {
+      // API failed (CORS on deployed sites) — use smart mock
+      spec = mockSpec(prompt);
     }
+
+    setGenerated(spec);
+    setHistory(h => [{ prompt, result: spec, ts: Date.now() }, ...h]);
+
+    // Generate sandbox preview
+    setGeneratingPreview(true);
+    try {
+      const res2 = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 2000,
+          messages: [{
+            role: "user",
+            content: `Generate a standalone HTML page that previews this SOC dashboard feature. Use inline CSS only. Dark background (#0a0a0a), monospace font, orange (#ff4a00) accents, white text. Make it look like a real SOC tool component with mock data. Include interactive elements where appropriate. Return ONLY the raw HTML — no markdown, no backticks, no explanation. Just the HTML starting with <!DOCTYPE html>.
+
+Feature: ${spec.title}
+Description: ${spec.description}
+UI Preview: ${spec.ui_preview}`
+          }]
+        }),
+      });
+      const data2 = await res2.json();
+      const html = data2.content.map(b => b.text || "").join("");
+      if (html.includes("<!DOCTYPE") || html.includes("<html") || html.includes("<div")) {
+        setPreview(html);
+      } else {
+        setPreview(mockPreviewHtml(spec));
+      }
+    } catch (e2) {
+      // API failed — use mock preview
+      setPreview(mockPreviewHtml(spec));
+    }
+    setGeneratingPreview(false);
+    setGenerating(false);
   }
 
   return (
-    <div className="px-6 py-6 max-w-[1100px] mx-auto">
+    <div className="px-6 py-6 max-w-[1100px] mx-auto" style={{minHeight:"calc(100vh - 120px)", overflowX:"hidden"}}>
       <div className="border-b border-[#1f1f1f] pb-4 mb-6">
         <div className="flex items-center gap-2 mb-2">
           <FlaskConical className="w-4 h-4 text-[#ff6a2a]" />
