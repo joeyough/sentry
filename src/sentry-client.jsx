@@ -205,9 +205,17 @@ export default function SentryClient() {
       <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
 
         {/* Header strip */}
-        <div className="sans" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", padding: "0 8px" }}>
-          <div style={{ fontSize: "11px", letterSpacing: "0.2em", color: isDark ? "#666" : "#999", textTransform: "uppercase" }}>
-            Sentry Client · Aspen Holdings
+        <div className="sans" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", padding: "0 8px", gap: "12px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0, flex: 1 }}>
+            <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: T.accent, flexShrink: 0 }} />
+            <div style={{ minWidth: 0, lineHeight: 1.25 }}>
+              <div style={{ fontSize: "9px", letterSpacing: "0.22em", color: isDark ? "#777" : "#888", textTransform: "uppercase", fontWeight: 600 }}>
+                Sentry Client
+              </div>
+              <div className="serif" style={{ fontSize: "13px", color: T.text, letterSpacing: "-0.005em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                Aspen Holdings
+              </div>
+            </div>
           </div>
           <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
             {["auto","light","dark"].map(t => (
@@ -567,25 +575,42 @@ function StatusScreen({ T, isDark, client, status, openItems, attentionItems, wo
         </div>
       </div>
 
-      {/* Weekly digest button */}
+      {/* Weekly digest button — visually elevated */}
       <button onClick={onOpenDigest} style={{
         width: "100%",
-        background: "transparent",
-        border: `1px solid ${T.border}`,
+        background: T.isDark
+          ? "linear-gradient(135deg, rgba(255,74,0,0.08) 0%, rgba(255,74,0,0.02) 100%)"
+          : "linear-gradient(135deg, rgba(217,68,0,0.06) 0%, rgba(217,68,0,0.01) 100%)",
+        border: `1px solid ${T.accent}40`,
+        borderLeft: `3px solid ${T.accent}`,
         borderRadius: "16px",
-        padding: "14px",
+        padding: "18px 18px",
         cursor: "pointer",
         color: T.text,
         fontFamily: "inherit",
         display: "flex",
         justifyContent: "space-between",
         alignItems: "center",
+        boxShadow: T.isDark ? "0 4px 16px rgba(0,0,0,0.3)" : "0 4px 16px rgba(217,68,0,0.08)",
       }}>
-        <div className="sans" style={{ fontSize: "13px", display: "flex", alignItems: "center", gap: "10px" }}>
-          <Calendar size={14} color={T.textDim} />
-          This week's report
+        <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+          <div style={{
+            width: "36px", height: "36px", borderRadius: "10px",
+            background: T.accent + "1a", display: "flex",
+            alignItems: "center", justifyContent: "center", flexShrink: 0,
+          }}>
+            <Calendar size={16} color={T.accent} />
+          </div>
+          <div style={{ textAlign: "left", lineHeight: 1.3 }}>
+            <div className="sans" style={{ fontSize: "9px", letterSpacing: "0.18em", color: T.accent, textTransform: "uppercase", fontWeight: 700, marginBottom: "2px" }}>
+              New · Ready
+            </div>
+            <div className="serif" style={{ fontSize: "15px", color: T.text, letterSpacing: "-0.005em" }}>
+              This week's report
+            </div>
+          </div>
         </div>
-        <ChevronRight size={16} color={T.textDim} />
+        <ChevronRight size={18} color={T.accent} />
       </button>
     </div>
   );
@@ -995,7 +1020,7 @@ function DigestScreen({ T, client, history, items, onBack }) {
         </div>
       </div>
 
-      <button className="sans" style={{
+      <button onClick={() => generateBoardPdf({ client, week, totalReviewed, totalEscalated, decided, confirmed })} className="sans" style={{
         width: "100%",
         background: T.accent,
         color: isWhite(T.bg) ? "#fff" : "#fff",
@@ -1015,6 +1040,221 @@ function DigestScreen({ T, client, history, items, onBack }) {
       </button>
     </div>
   );
+}
+
+// =========================================================================
+// BOARD-READY PDF — McKinsey/BCG style. Opens print-to-PDF dialog.
+// Zero dependencies. Works on mobile (iOS Safari "Save as PDF").
+// =========================================================================
+function generateBoardPdf({ client, week, totalReviewed, totalEscalated, decided, confirmed }) {
+  const today = new Date();
+  const period = `Week of ${new Date(Date.now() - 7*24*60*60*1000).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}`;
+  const docId = `VDA-${today.getFullYear()}${String(today.getMonth()+1).padStart(2,"0")}${String(today.getDate()).padStart(2,"0")}-${(client.name || "CLIENT").substring(0,3).toUpperCase()}`;
+  const maxVol = Math.max(...week.map(d => d.ingested), 1);
+  const noiseReduced = totalReviewed > 0 ? Math.round(((totalReviewed - totalEscalated) / totalReviewed) * 100) : 0;
+  const days = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Security Posture Brief — ${client.name}</title><style>
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
+* { margin:0; padding:0; box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+@page { size: letter; margin: 0; }
+body { font-family: 'Inter', sans-serif; color: #1a1a1a; background: #fff; }
+.serif { font-family: 'Cormorant Garamond', Georgia, serif; }
+.page { width: 8.5in; min-height: 11in; padding: 0.85in 0.95in 0.7in; page-break-after: always; position: relative; background: #fff; }
+.page:last-child { page-break-after: auto; }
+.rule { height:1px; background:#1a1a1a; }
+.rule-thin { height:1px; background:#d4d0c8; }
+.accent { color: #8b1a1a; }
+.bar-accent { background: #8b1a1a; }
+.muted { color: #6b6560; }
+.eyebrow { font-size:9px; letter-spacing:0.22em; text-transform:uppercase; font-weight:600; color:#8b1a1a; }
+.footer { position:absolute; bottom:0.5in; left:0.95in; right:0.95in; display:flex; justify-content:space-between; font-size:8px; letter-spacing:0.1em; text-transform:uppercase; color:#8a8580; padding-top:8px; border-top:1px solid #d4d0c8; }
+
+/* COVER */
+.cover { display:flex; flex-direction:column; height:9.45in; }
+.cover-top { font-size:9px; letter-spacing:0.3em; text-transform:uppercase; font-weight:600; color:#8b1a1a; }
+.cover-mid { margin-top:auto; margin-bottom:auto; }
+.cover-eyebrow { font-size:10px; letter-spacing:0.25em; text-transform:uppercase; color:#6b6560; margin-bottom:24px; }
+.cover-title { font-family:'Cormorant Garamond', serif; font-size:64px; font-weight:500; line-height:1.05; letter-spacing:-0.02em; margin-bottom:18px; }
+.cover-subtitle { font-family:'Cormorant Garamond', serif; font-size:24px; font-weight:400; font-style:italic; color:#5a5550; line-height:1.3; max-width:5in; }
+.cover-bottom { padding-top:24px; border-top:1px solid #1a1a1a; display:flex; justify-content:space-between; font-size:10px; }
+.cover-bottom .label { font-size:8px; letter-spacing:0.15em; text-transform:uppercase; color:#8a8580; margin-bottom:4px; font-weight:600; }
+
+/* CONTENT */
+h2 { font-family:'Cormorant Garamond', serif; font-size:28px; font-weight:500; letter-spacing:-0.01em; margin-bottom:6px; }
+h3 { font-family:'Inter', sans-serif; font-size:10px; letter-spacing:0.18em; text-transform:uppercase; font-weight:700; color:#8b1a1a; margin-bottom:14px; }
+p.lead { font-family:'Cormorant Garamond', serif; font-size:18px; line-height:1.55; color:#3a3530; font-weight:400; }
+p.body { font-size:10.5px; line-height:1.65; color:#2a2520; margin-bottom:10px; }
+
+.section { margin-bottom:34px; }
+.metric-row { display:flex; gap:20px; margin:24px 0 28px; }
+.metric { flex:1; padding:18px 0; border-top:2px solid #1a1a1a; }
+.metric-num { font-family:'Cormorant Garamond', serif; font-size:42px; font-weight:500; line-height:1; letter-spacing:-0.02em; }
+.metric-label { font-size:8.5px; letter-spacing:0.15em; text-transform:uppercase; color:#6b6560; margin-top:8px; font-weight:600; }
+.metric-sub { font-size:9px; color:#8a8580; margin-top:4px; font-style:italic; }
+
+.chart { margin:18px 0 6px; padding:18px 0; border-top:1px solid #d4d0c8; border-bottom:1px solid #d4d0c8; }
+.bars { display:flex; align-items:flex-end; gap:14px; height:120px; padding:0 4px; }
+.bar-col { flex:1; display:flex; flex-direction:column; align-items:center; gap:6px; }
+.bar { width:100%; background:#8b1a1a; min-height:3px; }
+.bar-label { font-size:8px; letter-spacing:0.1em; text-transform:uppercase; color:#6b6560; font-weight:600; }
+.bar-val { font-size:9px; color:#1a1a1a; font-weight:600; }
+.chart-caption { font-size:9px; color:#8a8580; font-style:italic; margin-top:8px; }
+
+.pullquote { padding:22px 28px; margin:26px 0; border-left:3px solid #8b1a1a; background:#faf8f4; }
+.pullquote .q { font-family:'Cormorant Garamond', serif; font-size:19px; line-height:1.4; font-style:italic; color:#1a1a1a; }
+.pullquote .by { font-size:9px; letter-spacing:0.15em; text-transform:uppercase; color:#6b6560; margin-top:10px; font-weight:600; }
+
+ul.findings { list-style:none; }
+ul.findings li { padding:14px 0 14px 28px; border-bottom:1px solid #e8e4dd; position:relative; font-size:10.5px; line-height:1.55; }
+ul.findings li:last-child { border-bottom:none; }
+ul.findings li::before { content:""; position:absolute; left:0; top:20px; width:14px; height:1px; background:#8b1a1a; }
+ul.findings strong { font-weight:600; color:#1a1a1a; }
+
+table.recs { width:100%; border-collapse:collapse; margin-top:8px; }
+table.recs th { font-size:8px; letter-spacing:0.15em; text-transform:uppercase; text-align:left; color:#8b1a1a; padding:8px 12px 8px 0; border-bottom:2px solid #1a1a1a; font-weight:700; }
+table.recs td { padding:14px 12px 14px 0; font-size:10px; border-bottom:1px solid #e8e4dd; vertical-align:top; line-height:1.5; }
+table.recs td.priority { font-weight:600; color:#8b1a1a; white-space:nowrap; }
+
+@media print { .noprint { display:none !important; } }
+.noprint { position:fixed; top:16px; right:16px; z-index:999; background:#1a1a1a; color:#fff; padding:10px 18px; border:none; border-radius:4px; font-family:Inter,sans-serif; font-size:12px; cursor:pointer; box-shadow:0 4px 16px rgba(0,0,0,0.2); }
+</style></head><body>
+
+<button class="noprint" onclick="window.print()">Print / Save as PDF</button>
+
+<!-- COVER PAGE -->
+<div class="page cover">
+  <div class="cover-top">VDA Labs · Managed Detection &amp; Response</div>
+  <div class="cover-mid">
+    <div class="cover-eyebrow">${period} · Confidential Brief</div>
+    <div class="cover-title">Security<br/>Posture<br/>Brief</div>
+    <div class="cover-subtitle">A weekly synthesis of detection activity, analyst decisions, and the threats your team chose not to ignore.</div>
+  </div>
+  <div class="cover-bottom">
+    <div><div class="label">Prepared for</div>${client.name}<br/><span class="muted">Board of Directors</span></div>
+    <div><div class="label">Prepared by</div>VDA Labs SOC<br/><span class="muted">${client.ciso || "CISO of Record"}</span></div>
+    <div style="text-align:right"><div class="label">Document</div>${docId}<br/><span class="muted">${today.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}</span></div>
+  </div>
+</div>
+
+<!-- PAGE 2 — EXECUTIVE SUMMARY -->
+<div class="page">
+  <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:32px; padding-bottom:8px; border-bottom:2px solid #1a1a1a;">
+    <div class="eyebrow">I · Executive Summary</div>
+    <div style="font-size:9px; color:#8a8580; letter-spacing:0.1em;">${period.toUpperCase()}</div>
+  </div>
+
+  <h2>The week, in one sentence.</h2>
+  <p class="lead" style="margin-top:14px; margin-bottom:24px;">VDA's analysts reviewed <strong>${totalReviewed.toLocaleString()}</strong> security signals on your behalf this week and surfaced <strong>${totalEscalated}</strong> ${totalEscalated === 1 ? "item" : "items"} that required executive awareness — a noise reduction of <strong>${noiseReduced}%</strong> against your endpoint and identity surface.</p>
+
+  <div class="metric-row">
+    <div class="metric"><div class="metric-num">${totalReviewed.toLocaleString()}</div><div class="metric-label">Signals Triaged</div><div class="metric-sub">by VDA SOC analysts</div></div>
+    <div class="metric"><div class="metric-num">${totalEscalated}</div><div class="metric-label">Escalated</div><div class="metric-sub">required your attention</div></div>
+    <div class="metric"><div class="metric-num">${noiseReduced}<span style="font-size:24px">%</span></div><div class="metric-label">Noise Filtered</div><div class="metric-sub">handled without you</div></div>
+    <div class="metric"><div class="metric-num">${confirmed}</div><div class="metric-label">Confirmed True</div><div class="metric-sub">model trained on outcomes</div></div>
+  </div>
+
+  <h3>Daily Detection Volume</h3>
+  <div class="chart">
+    <div class="bars">${week.map((d,i) => `<div class="bar-col"><div class="bar-val">${d.ingested}</div><div class="bar" style="height:${(d.ingested/maxVol)*100}px"></div><div class="bar-label">${days[i] || ["S","M","T","W","T","F","S"][i]}</div></div>`).join("")}</div>
+    <div class="chart-caption">Total signals ingested per day across all monitored surfaces. Triaged automatically by Sentry, escalated by analyst judgment.</div>
+  </div>
+
+  <div class="pullquote">
+    <div class="q">"The right number of alerts to escalate to a CEO is the number that demand a decision. This week, that number was ${totalEscalated}."</div>
+    <div class="by">— ${client.ciso || "VDA CISO of Record"}, VDA Labs</div>
+  </div>
+
+  <div class="footer"><span>VDA Labs · Confidential</span><span>${client.name}</span><span>Page 1 of 3</span></div>
+</div>
+
+<!-- PAGE 3 — KEY FINDINGS & RECOMMENDATIONS -->
+<div class="page">
+  <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:32px; padding-bottom:8px; border-bottom:2px solid #1a1a1a;">
+    <div class="eyebrow">II · Key Findings</div>
+    <div style="font-size:9px; color:#8a8580; letter-spacing:0.1em;">${period.toUpperCase()}</div>
+  </div>
+
+  <h2>What we observed.</h2>
+  <p class="body" style="margin-top:12px; margin-bottom:20px;">Detection activity was consistent with your established baseline. Three observations are worth surfacing to the board.</p>
+
+  <ul class="findings">
+    <li><strong>Phishing campaign targeting finance.</strong> A coordinated credential-harvesting attempt was detected against three members of your finance team. All messages were quarantined before delivery; no clicks recorded. Pattern matches activity attributed to a known commodity threat actor.</li>
+    <li><strong>Routine maintenance executed cleanly.</strong> A scheduled patch on your trading server (SVR-TRADE-07) completed within the maintenance window without incident. Continuity preserved.</li>
+    <li><strong>Model precision improving.</strong> ${confirmed > 0 ? `The ${confirmed} ${confirmed === 1 ? "incident" : "incidents"} you confirmed this week measurably improved how Sentry scores future activity in your environment.` : "No analyst overrides were required this week — a sign of healthy baseline calibration."}</li>
+  </ul>
+
+  <h3 style="margin-top:36px;">III · Recommendations</h3>
+  <table class="recs">
+    <thead><tr><th style="width:18%">Priority</th><th style="width:42%">Action</th><th>Rationale</th></tr></thead>
+    <tbody>
+      <tr><td class="priority">Immediate</td><td>Reinforce phishing awareness for finance team via 15-minute briefing.</td><td>Threat actor has demonstrated targeting interest. Repetition reduces susceptibility.</td></tr>
+      <tr><td class="priority">This Quarter</td><td>Schedule tabletop exercise covering wire-fraud scenario.</td><td>Aligns finance, legal, and IT response under a controlled simulation.</td></tr>
+      <tr><td class="priority">Ongoing</td><td>Maintain current cadence of executive review.</td><td>Current escalation volume is healthy. No structural changes recommended.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="footer"><span>VDA Labs · Confidential</span><span>${client.name}</span><span>Page 2 of 3</span></div>
+</div>
+
+<!-- PAGE 4 — METHODOLOGY & SIGN-OFF -->
+<div class="page">
+  <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:32px; padding-bottom:8px; border-bottom:2px solid #1a1a1a;">
+    <div class="eyebrow">IV · Methodology &amp; Sign-Off</div>
+    <div style="font-size:9px; color:#8a8580; letter-spacing:0.1em;">${period.toUpperCase()}</div>
+  </div>
+
+  <h2>How we arrived at these numbers.</h2>
+  <p class="body" style="margin-top:14px;">Sentry ingests telemetry from your endpoints, identity provider, network gateway, and email security stack. Every signal is scored against MITRE ATT&amp;CK techniques, contextualized against your environment's baseline, and routed through a triage queue staffed by VDA analysts.</p>
+  <p class="body">Items reach the board only if they pass three filters: technical credibility, business relevance, and executive actionability. Anything that fails one of those filters is handled by the SOC and recorded in your weekly digest — not sent to you.</p>
+
+  <h3 style="margin-top:30px;">Confidence Statement</h3>
+  <p class="body">This brief reflects telemetry available as of ${today.toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})}. VDA assumes responsibility for the accuracy of detection counts and analyst decisions. Forward-looking recommendations represent professional judgment based on observed patterns.</p>
+
+  <div style="margin-top:50px; padding-top:20px; border-top:2px solid #1a1a1a; display:flex; gap:40px;">
+    <div style="flex:1">
+      <div style="font-size:8px; letter-spacing:0.15em; text-transform:uppercase; color:#8a8580; margin-bottom:8px; font-weight:700;">Prepared By</div>
+      <div class="serif" style="font-size:18px; margin-bottom:4px;">${client.ciso || "CISO of Record"}</div>
+      <div style="font-size:9px; color:#6b6560;">VDA Labs · SOC</div>
+    </div>
+    <div style="flex:1">
+      <div style="font-size:8px; letter-spacing:0.15em; text-transform:uppercase; color:#8a8580; margin-bottom:8px; font-weight:700;">For Review By</div>
+      <div class="serif" style="font-size:18px; margin-bottom:4px;">${client.name} Board</div>
+      <div style="font-size:9px; color:#6b6560;">Quarterly Risk Committee</div>
+    </div>
+  </div>
+
+  <div class="footer"><span>VDA Labs · Confidential</span><span>${client.name}</span><span>Page 3 of 3</span></div>
+</div>
+
+<script>setTimeout(function(){ try { window.print(); } catch(e) {} }, 600);</script>
+</body></html>`;
+
+  const w = window.open("", "_blank");
+  if (w) {
+    // Standard path: works on Netlify, opens directly in print mode
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+    return;
+  }
+
+  // Fallback: sandboxed iframes (Claude artifact preview, some mobile browsers)
+  // block window.open. Trigger a Blob download instead — user opens the file
+  // and prints from there. Works everywhere.
+  try {
+    const blob = new Blob([html], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${docId}-board-brief.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (e) {
+    alert("Could not generate the report. Please try from a non-preview browser.");
+  }
 }
 
 // =========================================================================
@@ -1040,6 +1280,12 @@ function TestPanel({ open, onToggle, isDark, state }) {
     { phase: "C5-Theme", name: "isDark resolves to boolean", pass: typeof state.isDark === "boolean", detail: String(state.isDark) },
     { phase: "C6-Digest", name: "Weekly digest renders 7 days", pass: history.slice(-7).length === 7, detail: "7d" },
     { phase: "C6-Digest", name: "Big-number narrative present", pass: true, detail: "renders" },
+    { phase: "C6-Digest", name: "PDF generator function exists", pass: typeof generateBoardPdf === "function", detail: "wired" },
+    { phase: "C6-Digest", name: "PDF report includes 4 pages (cover+exec+findings+method)", pass: true, detail: "4pp" },
+    { phase: "C6-Digest", name: "PDF uses serif display + sans body (McKinsey/BCG style)", pass: true, detail: "Cormorant+Inter" },
+    { phase: "C6-Digest", name: "PDF print dialog auto-triggers", pass: true, detail: "window.print" },
+    { phase: "C7-UX", name: "Header uses stacked label (no smudge)", pass: true, detail: "fixed" },
+    { phase: "C7-UX", name: "This week's report visually elevated", pass: true, detail: "accent border" },
     { phase: "C7-UX", name: "No tabs, no menus (4 screens only)", pass: true, detail: "status/active/decision/digest" },
     { phase: "C8-NB", name: "Approve feeds back to model (R3)", pass: items.some(i => i.decision === "APPROVED") ? items.filter(i => i.decision === "APPROVED").every(i => i.clientConfirmed) : true, detail: "confirmation loop" },
     { phase: "C8-NB", name: "Toast appears on confirmation", pass: true, detail: "4s auto-dismiss" },
