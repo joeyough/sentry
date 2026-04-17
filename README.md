@@ -1,19 +1,43 @@
-# Sentry — VDA Labs MSSP Console
+# VDA Ticketing & Client Portal
 
-A noise-reduction layer and decision orchestration tool for VDA Labs' SecOps alerting.
+A focused ticketing system and customer portal for VDA Labs' SOC team. Built to replace the manual email ↔ SIM copy-paste that runs Sibe's daily workflow today.
 
-Built by 3Nails Infosec. VDA owns the repo, the deployment, and the data.
+Built by 3Nails Infosec. VDA owns the repo, the deployment, the data, and the extension path from day one.
+
+## What this is (and what it isn't)
+
+**This is:**
+- A ticketing system for VDA's ~12 SOC analysts and ~150 customers
+- A Sniper bridge that turns analyst-initiated Securonix incidents into tickets
+- An email bridge that turns customer emails to `soc@vdalabs.com` into tickets
+- A simple customer-facing portal (open a case, view tickets, contract summary, documents)
+
+**This is not:**
+- A SIEM or XDR platform. VDA has Sniper. We don't compete with it.
+- A CRM, quoting tool, or project management system. Halo tried to be those. It failed.
+- A system of record for security telemetry. Sensitive data stays in Sniper — we reference incident IDs.
+
+## Why this exists
+
+Halo was a 5-month POC that consumed 100-200 hours of Jim's configuration time and produced nothing usable. The reason: it was sold as white-glove, delivered as homework, and expanded into everything (CRM, project management, invoicing) before it could deliver the one thing Jim actually wanted — ticketing.
+
+Full postmortem and phased remediation plan in the `VDA_SecOps_Plan_v4` deck.
 
 ## What's in this repo
 
 ```
 src/
-  sentry-v2.jsx       # Engineer console — Dashboard, Alerts, Clients, Lab
-  sentry-client.jsx   # Client app — status, decisions, digest, board PDF
+  App.jsx                  # React Router — / (analyst) and /portal (customer)
+  main.jsx                 # Entry point
+  sentry-client.jsx        # Customer portal — 4 views (case, tickets, contract, docs)
+  sentry-v2.jsx            # Analyst ticketing UI (v2 — current)
+
+public/
+  sentry-design-system-v2.html   # Design system (standalone reference doc)
 
 docs/
-  DISCOVERY.md          # One-pager: problem, approach, 5-week plan, metrics
-  BUS_FACTOR.md         # If you only read one file for handoff, read this
+  DISCOVERY.md             # 13-question doc sent to Jim + Sibe
+  BUS_FACTOR.md            # Handoff notes — if you only read one file, read this
 ```
 
 ## Quick start
@@ -25,95 +49,128 @@ npm install
 npm run dev
 ```
 
-Local dev server at `localhost:5173`. Both routes work:
-- `/` — engineer console
-- `/client` — client app
+Dev server at `localhost:5173`:
+- `/` — analyst ticketing UI
+- `/portal` — customer portal
 
 ## Stack
 
-- **React** (functional components, hooks only)
-- **Vite** (build tool)
-- **Tailwind CSS** (in dev dependencies — used for layout primitives only; the JSX components are styled with inline styles for Claude Artifacts portability)
+- **React** + **Vite**
+- **Tailwind CSS** (used sparingly; components use inline styles for portability)
 - **Lucide React** (icons)
-- **React Router** (`/` and `/client` routes)
-- **No backend yet** — state lives in React. Week 1 adds Supabase.
+- **React Router**
+- **Supabase** — ticket storage, auth, row-level tenant isolation (added week 3)
+- **Python** — Sniper SOAR playbook (separate subdirectory, added week 4)
 
-Deliberately vanilla. A competent junior dev or any LLM coding agent can extend this.
+Deliberately vanilla. A competent junior dev or an LLM coding agent can extend this without hand-holding. The goal is zero key-man risk.
 
-## The two apps
+## The two surfaces
 
-### Engineer Console (`sentry-v2.jsx`)
+### Analyst UI (`sentry-v2.jsx`)
 
-Four tabs:
+The daily driver for VDA's SOC team. Replaces manual copy-paste between Sniper and email.
 
-- **Dashboard** — Tufte-style. One sentence, sparklines, small multiples, horizon chart, outcome metrics, model retrain timestamp.
-- **Alerts** — Triage queue with source badges, dedupe counts, three learning loops, auto-reprioritization badges, suggested playbooks, agentic enrichment panel, boost rule indicators, client confirmation badges.
-- **Clients** — Per-client maturity, criticality, escalation contacts, boost rules for known-bad patterns.
-- **Lab** — Natural-language feature requests. Generates specs with red tests and a live sandbox preview iframe. **Mock-only** (no external API calls — runs offline, no CORS issues).
+- **Ticket queue** — all open tickets, grouped by customer, filtered by assignee and SLA status
+- **Ticket composer** — auto-pulls customer context from the incident payload. Structurally prevents sending another customer's data (the wrong-client bug Jim flagged twice).
+- **Sniper incident reference** — every ticket links back to its Sniper incident ID. We don't duplicate security data.
+- **SLA clock** — per-ticket, severity-driven. Surfaces breaches to the queue automatically.
+- **Templated outbound emails** — analyst picks template, customer auto-fills, only free-text fields are editable.
+- **Auto-reminders** — if the customer doesn't reply in X hours, the ticket generates a follow-up automatically (X varies by severity, set during discovery).
 
-Auto light/dark theme. Responsive — icon-only tabs on mobile via JavaScript `isMobile` state + resize listener (not CSS media queries).
+### Customer Portal (`sentry-client.jsx`)
 
-### Client App (`sentry-client.jsx`)
+The four views Jim specified. Nothing more in v1.
 
-Four screens (no tabs, no menus):
+1. **Home** — dashboard with open tickets and an "Open a case" CTA
+2. **My Tickets** — all tickets (open, ongoing, closed) with status and last update
+3. **Contract / Licenses** — summary of what they bought, usage against limits (S1, Huntress, SNYPR)
+4. **Documents** — shared docs per customer (SLAs, comms guidelines, onboarding paperwork)
 
-- **Status** — The 2-second answer: all clear / we're on it / your attention needed.
-- **Active** — What VDA is working on right now.
-- **Decision** — Approve / Override / Ask later. Clarity rating (1-5). Criticality teach-back. Confirmations feed back into the scoring model.
-- **Digest** — Weekly summary with **board-ready PDF export** (see below).
+Mobile-first. Magic-link auth — no passwords to manage, no separate credentials for customers to lose.
 
-Auto light/dark theme. Inter (UI) + Cormorant Garamond (PDF display type).
+**Explicitly out of v1:** quotations, invoices, agreements, schedule-a-meeting, knowledge base. Those are Phase 2. Halo tried to ship all of them at once and got rolled back.
 
-### Board PDF generator
+## Integration architecture
 
-The Digest screen's "Save as PDF for the board" button triggers `generateBoardPdf()`, which produces a 4-page McKinsey/BCG-style consulting brief:
+### Sniper bridge (Securonix SOAR → Ticket API)
 
-| Page | Section |
-|------|---------|
-| 1 | Cover — client name, period, document ID, prepared-by/for |
-| 2 | Executive Summary — one-sentence narrative, 4-metric row, daily volume bar chart, pull quote |
-| 3 | Key Findings + Recommendations table (Priority/Action/Rationale) |
-| 4 | Methodology, Confidence Statement, Sign-off blocks |
+Sniper (the Securonix SIEM, `snypr`) ships with a built-in SOAR capability and Python code blocks in its playbooks. The integration is analyst-initiated:
 
-Typography: Cormorant Garamond display + Inter body. Burgundy `#8b1a1a` accent on cream. Letter-size pages, page numbers, "Confidential" footers. Zero npm dependencies — opens in a new window via `window.open()` with a Blob-download fallback for sandboxed environments. Auto-triggers print dialog.
+```
+Analyst triages incident in Sniper
+  ↓
+Marks incident state: "open ticket"
+  ↓
+Sniper playbook triggering rule fires
+  ↓
+Python playbook POSTs to our ticket API:
+  - incident_id
+  - severity
+  - asset
+  - customer_id
+  - summary
+  ↓
+Ticket created, analyst notified in our UI
+```
 
-## Key features (v3)
+Critical: we don't auto-create tickets from every alert. Sibe explicitly doesn't want that — too much noise. The analyst decides which incidents become customer-facing tickets.
 
-| Feature | Inspired by | What it does |
-|---------|------------|--------------|
-| Three learning loops | Critical Start TBR | Known-good suppression, per-client scoring |
-| Auto-reprioritization | NightBeacon | Elevates medium events exhibiting critical behavior |
-| Boost rules | NightBeacon | Known-bad patterns (LOLBIN, C2, cred dump) boost scores |
-| Playbook suggestions | NightBeacon | Response steps mapped to every MITRE technique |
-| Client confirmation loop | Original | Client approvals retrain the scoring model |
-| Agentic enrichment | NightBeacon | Related alerts, process tree, network connections |
-| Lab sandbox | Original | Natural language to spec + tests + live preview (mock-only) |
-| Board PDF brief | Original | McKinsey/BCG-style 4-page weekly report, one click |
-| Model retrain timestamp | NightBeacon | Shows when scoring model last updated |
+### Email bridge (inbound → ticket)
 
-## Measurement framework
+Inbound listener on `soc@vdalabs.com`. Subject parsing:
+- If subject contains `[VDA-XXXX]`, append to that ticket
+- Otherwise, create new ticket and assign based on customer domain mapping
 
-Aligned with SecOps deck slide 16. Baselines come from discovery, not promises.
+Every ticket reply from a customer threads automatically. No more copy-paste from the SOC inbox into Sniper.
 
-| Metric | What | How |
-|--------|------|-----|
-| Client clarity (1-5) | Did they understand? | Weekly pilot scores |
-| FP rate | Is noise improving? | Tracked from triage decisions |
-| Renewal signal | Does sales mention alerting? | Yes/no from sales team |
+### Auth + tenancy
 
-## Reference platforms
+- VDA analysts: Google Workspace SSO
+- Customers: magic-link email auth
+- Row-level security in Supabase enforces tenant isolation — customer A can never see customer B's tickets
 
-- **Critical Start** — zero-trust triage, Trusted Behavior Registry, mobile-first transparency
-- **Binary Defense NightBeacon** — AI-first pipeline, analyst feedback loops, auto-reprioritization, boost rules
+## Measurement
 
-Sentry takes the best of both, tuned for a $10-20M MSSP.
+Aligned with `VDA_SecOps_Plan_v4` slide 10 and 16. Baselines come from discovery, not promises.
+
+| Metric | What it measures | How |
+|--------|------------------|-----|
+| **Copy-paste count** | Manual data transfer events per day | Target week 5: zero for pilot accounts |
+| **MTTR** | Mean time to resolution, per severity | Baselined weeks 1–2 |
+| **SLA adherence** | % tickets meeting severity SLA | Tracked automatically from week 5 |
+| **Wrong-client incidents** | Times customer A's data goes to customer B | Historical: multiple/quarter. Target: zero |
+| **Analyst adoption** | % of SOC team using tool for customer comms | Target 70% by week 8 or we stop and diagnose |
+
+If Sibe's copy-paste count isn't zero by week 5 on the two pilot accounts, the system isn't working. That's the primary kill-switch.
+
+## Delivery model
+
+- **Weeks 1–2:** Discovery. 13-question doc back from Jim + Sibe. Slack channel for daily async feedback. Walk one live incident end-to-end with Sibe.
+- **Weeks 3–5:** Build the MVP. Ticket core, Sniper bridge, email bridge, wrong-client prevention, SLA clock.
+- **Weeks 6–8:** Two pilot customers. Daily feedback. No new features — fix what breaks.
+- **Weeks 9–14:** Customer portal ships. Templated monthly customer reports. Roll to remaining 148 customers in waves.
+- **Weeks 15–20:** Named owner inside VDA. Weekly metric review. VDA engineers begin extending.
+
+Halo's failure mode was the absence of an adoption plan. This has one: Sibe is in the tool from day one, Slack is the feedback loop, weekly metric reviews are non-negotiable.
 
 ## Deployment
 
-Connected to Netlify via `netlify.toml`. Auto-deploys on push to main.
+Connected to Netlify via `netlify.toml`. Auto-deploys on push to `main`.
 
-- `sentry-vda.netlify.app/` — engineer console
-- `sentry-vda.netlify.app/client` — client app
+- `sentry-vda.netlify.app/` — analyst UI
+- `sentry-vda.netlify.app/portal` — customer portal
+- `sentry-vda.netlify.app/sentry-design-system-v2.html` — design system reference
+
+## Why this time will be different from Halo
+
+| Halo | This build |
+|------|------------|
+| Sold white-glove, delivered homework | Joey + Vincent do the work; Jim's hours are for decisions only |
+| Scope grew into CRM + PM + quoting | Scope is ticketing only. Phase 2 features live in a separate doc. |
+| No product owner inside VDA | Jim is the product owner. Sibe is the daily user. Both are in Slack. |
+| Vendor-hosted, vendor-controlled | VDA owns the repo, the database, the deployment. Zero lock-in. |
+| Built against a pitch deck | Built against Sibe's actual daily workflow |
+| 5 months of configuration | 5 weeks to working MVP, or we stop and diagnose |
 
 ## License
 
