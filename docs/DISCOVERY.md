@@ -1,141 +1,163 @@
 # Sentry — Discovery One-Pager
-**VDA Labs MSSP Console · Scoping Document**
+**VDA Labs × 3Nails Infosec · Scoping Document · v4**
 
 ---
 
 ## The problem in one sentence
 
-VDA's engineers are drowning in duplicate alerts across Slack, Monday.com, and the SIEM — most are false positives, there's no single place to triage, and there's no clean way to show clients what's actually being done.
+VDA's SOC analysts hand-copy every customer email into Securonix Sniper, and every Sniper alert into email — there's no ticket of record, SLAs are tracked by memory, and wrong-customer data leakage is a recurring incident.
 
 ## The current state
 
-- Halo was abandoned months ago. The team routed around it and never came back.
-- The real system of record is Slack threads and individual memory.
-- There is no reliable path from a detected alert to a client notification — some clients hear in 3 minutes, some in 3 hours, some never.
-- Sales absorbs the consequences in renewal conversations.
-- The team has been told to fix this twice. The fix has not stuck.
+- Halo was abandoned after a 5-month POC consumed 100–200 hours of Jim Blankenship's time and produced nothing usable.
+- Analysts (led by Sibe Klomp, SOC manager) manually copy customer responses from `soc@vdalabs.com` into Sniper incidents, and manually compose outbound notifications by copying incident detail back into fresh emails.
+- There is no ticket of record. Follow-ups are remembered, not triggered.
+- Mixing one customer's data into another customer's email has happened multiple times. The UI offers no structural prevention.
+- Kendall (VDA leadership) is skeptical this can be fixed without repeating the Halo failure. That skepticism is correct — and the plan is designed around it.
+- ~150 customers. ~12 SOC analysts. 1-hour SLA on critical incidents.
 
 ## What Sentry is
 
-A noise-reduction layer and decision orchestration tool that sits on top of VDA's existing stack. Not a SIEM. Not a SOAR. Not a Halo replacement. A purpose-built console that:
+A ticketing system and customer portal purpose-built for VDA's SOC workflow. Not a SIEM. Not an XDR. Not a Halo replacement in scope — a narrower, disciplined slice of what Halo was asked to do.
 
-1. **Ingests** alerts from any source (SIEM, EDR, Slack webhooks, Monday.com webhooks).
-2. **Dedupes** alerts on a `(source, rule, asset, time-window)` key so the same event becomes one row, not seven.
-3. **Scores** alerts using a per-client context model that learns from analyst decisions over time.
-4. **Suppresses** known-good patterns (Critical Start TBR-style) so engineers only see deviations.
-5. **Elevates** known-bad patterns via boost rules — LOLBIN execution, C2 beaconing, credential dumping.
-6. **Reprioritizes** medium events exhibiting critical behavior so nothing slips through SLA gaps.
-7. **Suggests** response playbooks mapped to every MITRE ATT&CK technique.
-8. **Reports** to clients through a mobile-first app where they approve, override, teach the system what matters, and export a board-ready PDF brief.
+1. **Ticket core** — open, assign, note (internal + external), status, close. Severity field drives SLA clock.
+2. **Sniper bridge (analyst-initiated)** — an analyst triaging in Sniper marks an incident as "open ticket," which fires a Sniper SOAR Python playbook that POSTs the incident payload to the Sentry ticket API. Not every alert becomes a ticket — the analyst decides.
+3. **Email bridge** — inbound listener on `soc@vdalabs.com`. Subject parsing threads replies to existing tickets; unmatched emails become new tickets.
+4. **Wrong-client prevention** — outbound email composer pulls customer context from the incident payload, not free-text. Structurally prevents one customer's data from being sent to another.
+5. **SLA clock** — per-ticket, severity-driven. Surfaces breaches to the analyst queue. Triggers auto-reminders when a customer doesn't respond in X hours.
+6. **Customer portal** — four views only (per Jim): open a case / view tickets / contract summary / documents. Magic-link auth, row-level tenant isolation.
+7. **Templated outbound emails** — analyst picks template; customer name, ticket ID, severity auto-fill; only free-text fields are editable.
 
-## What best-in-class looks like (deck slide 13)
+## What Sentry is not
 
-Four patterns separate the best MSSPs from the rest. Most MSPs miss all four. Sentry is built on all four.
+- **Not a SIEM.** VDA has Sniper. We integrate, we don't compete.
+- **Not a CRM, quote tool, invoice system, or project manager.** Halo tried to be all of those. Rolled back.
+- **Not a system of record for security telemetry.** VDA's promise to customers is "we don't store your data." Sniper holds the incident detail. The ticket holds the reference and the communication log.
+- **Not Salesforce, Monday, or Slack.** Those stay. We don't replace them.
 
-**1. Known-good suppression, not just known-bad detection.** Critical Start filters everything through a Trusted Behavior Registry. Known-good patterns are resolved automatically. Only deviations surface.
+## Who's who
 
-**2. The model learns from every analyst decision.** NightBeacon retrains nightly on analyst feedback. Every true positive and false positive makes the next call faster.
+| Role | Name | What they care about |
+|------|------|----------------------|
+| VDA product owner | **Jim Blankenship** | Scope discipline. Won't sign off on another Halo. |
+| Primary user | **Sibe Klomp** (SOC manager) | Making the daily copy-paste go away. |
+| VDA leadership / sign-off | **Kendall** | Evidence this won't fail the same way. |
+| 3Nails partner | **Vincent** | Technical oversight, delivery accountability. |
+| Builder | Joey (3Nails) | Product, PM, build. |
 
-**3. The client is part of the feedback loop, not just a notification endpoint.** When a client confirms an escalation, it strengthens the detection model for their environment.
+## Halo postmortem (the thing to not repeat)
 
-**4. Auto-reprioritization catches what SLA thresholds miss.** NightBeacon automatically elevates medium events that exhibit high-risk behavior.
+1. **Sold white-glove, delivered homework.** 40 hours of professional services promised. Jim asked for 60. Got 8 actual support hours over 5 months. Everything else was Jim configuring APIs alone.
+2. **Scope drifted into everything.** Started as ticketing. Grew into CRM + PM + quotes + invoicing. Sales hated it. Project team hated it. All rolled back.
+3. **No product owner inside the vendor.** When sales pushed back, there was nobody on Halo's side to advocate for the fix. Jim absorbed the conflict.
+4. **Built against a pitch deck, not a workflow.** The software dictated the process instead of fitting it. Analysts reverted to email within weeks.
 
-## How Sentry delivers it (deck slide 14)
+## What's different this time
 
-| Capability | What it does | Inspired by |
-|---|---|---|
-| **Suppress** | Three learning loops score every alert by client context. Known-good auto-resolves. | Critical Start TBR |
-| **Learn** | Every analyst decision retrains the model. Customer confirmations strengthen detection. | NightBeacon feedback pipeline |
-| **Elevate** | Auto-reprioritization badges. Boost rules for known-bad patterns. Suggested playbooks. | NightBeacon auto-reprioritization |
-| **Teach** | Client app is bidirectional. Clients approve, override, rate clarity 1-5, adjust criticality. | Original to Sentry |
-| **Extend** | Lab tab: any engineer describes a feature in plain English, gets a spec with tests and a sandbox preview. | Original to Sentry |
-| **Report** | One-click McKinsey/BCG-style PDF brief from the client app, ready for the board. | Original to Sentry |
+- **Sibe is the user, not Jim.** Sibe is in the tool from day one. Every screen is shaped against his daily workflow. Jim's hours are for decisions, not configuration.
+- **Scope is ticketing only for 5 weeks.** Portal and reports are Phase 2 (weeks 9–14). Anything else moves to a separate Phase 3 doc.
+- **VDA owns the repo, the database, the deployment.** React + Vite + Supabase. Junior-readable. No vendor lock-in. The tool survives if 3Nails disappears.
+- **Async-first delivery.** Slack channel with Joey, Vincent, Jim, Sibe. Weekly metric review. No six-month silence before a demo.
+- **Every phase has a kill switch.** If Sibe's copy-paste count isn't zero by week 5 on the two pilot accounts, we stop and diagnose before adding scope.
 
-## The four tabs (engineer console)
+## Integration architecture
 
-| Tab | Purpose | Audience |
-|---|---|---|
-| **Dashboard** | Tufte-style war-room readout. One sentence, sparklines, small multiples, horizon chart, model retrain timestamp. | Engineers + leadership |
-| **Alerts** | Triage queue with source badges (EDR/SIEM/Slack/Monday), dedupe counts, auto-reprioritization, playbook suggestions, enrichment, boost rules. | Engineers |
-| **Clients** | Per-client maturity, criticality, escalation contacts, boost rules. | Engineers + managers |
-| **Lab** | Natural-language feature requests with auto-generated specs, red tests, and live sandbox preview. **Mock-only** — runs offline, no API dependencies, no CORS. | Anyone |
+### Sniper bridge (Securonix SOAR → ticket API)
 
-## The client app
+Securonix Sniper ships with a built-in SOAR capability and Python code blocks in playbooks. The flow:
 
-A separate mobile-first app for VDA's clients. Three states:
+```
+Analyst triages incident in Sniper
+  ↓
+Sets incident state: "open ticket"
+  ↓
+Sniper playbook triggering rule fires
+  ↓
+Python playbook POSTs to Sentry ticket API:
+  { incident_id, severity, asset, customer_id, summary }
+  ↓
+Ticket created. Analyst notified in Sentry UI.
+```
 
-- **All clear** — everything's handled, no action needed.
-- **We're on it** — VDA is actively triaging.
-- **Your attention** — there's a decision only the client can make.
+Critical design decision: **analyst-initiated**. Sibe explicitly rejected the "every alert becomes a ticket" model. Too much noise. The analyst decides which incidents become customer-facing tickets.
 
-Clients approve, override, rate clarity (1-5), or teach the system what matters via criticality feedback. Client confirmations feed back into the scoring model.
+### Email bridge (inbound → ticket)
 
-The client app also includes a **weekly digest** that produces a one-click **board-ready PDF brief**. The brief is a 4-page McKinsey/BCG-style consulting document: a cover page, an executive summary with metrics and a daily-volume chart, a key-findings + recommendations table, and a methodology / sign-off page. Cormorant Garamond display type, Inter body, burgundy accent on cream — designed to look like an audit firm produced it, not an AI. Zero dependencies; uses `window.open()` with a Blob-download fallback for sandboxed environments.
+- Inbound listener on `soc@vdalabs.com`
+- Subject pattern `[VDA-XXXX]` threads to existing ticket
+- Unmatched emails create new ticket; customer assigned by sender domain
+- Every ticket reply from a customer threads automatically — no manual re-entry
 
-## Mobile responsiveness
+### Auth + tenancy
 
-Both apps detect viewport width via a JavaScript `isMobile` state hook + resize event listener — not CSS media queries. This decision was made because Claude Artifact sandboxes don't always honor `@media` rules in injected styles, and the JS approach gives consistent behavior across every deployment target. Tabs render icon-only below 640px; full label + badge above.
+- VDA analysts → Google Workspace SSO (Kendall gates Workspace admin, so this is coordinated up front)
+- Customers → magic-link email auth, no password management
+- Supabase row-level security enforces tenant isolation
 
-## The 5-week MVP plan
+## The 5-week build scope
 
-| Week | Deliverable | Key tests |
-|---|---|---|
-| 1 | Ingestion bridge — webhook receiver + normalized schema + dedupe key | 5 acceptance tests |
-| 2 | Alerts tab with dedupe + source filters + auto-reprioritization + playbooks | 6 acceptance tests |
-| 3 | Tufte dashboard wired to live data + outcome metrics framework | 5 acceptance tests |
-| 4 | Client portal — internal config + client-facing app with confirmation loop | 5 acceptance tests |
-| 5 | Suppression + boost rules engine + Slack/Teams outbound + polish | 6 acceptance tests |
+Taken from Jim's original Halo requirements list (the "feature floor" — Halo could do all of these, so we must too):
 
-Every week is gated red-to-green: tests written before the code, the week is done only when all tests pass, artifact deployed to staging for VDA to review.
+- Ticket core with customizable status workflow
+- Tenancy: one customer per ticket, enforced
+- Sniper SOAR bridge (analyst-initiated)
+- Inbound email bridge on `soc@vdalabs.com`
+- Wrong-client prevention on outbound compose
+- SLA clock (severity-driven)
+- Auto-reminders when customers don't reply
+- Template-based outbound emails
+- Internal + external notes on tickets
+- Assign tickets to individual analysts
 
-## How we plan to measure (deck slide 16)
+**Explicitly Phase 2 (weeks 9–14), not the 5-week build:**
 
-| Metric | What | How |
-|---|---|---|
-| **Client clarity (1-5)** | Did the client understand? | Weekly pilot scores |
-| **FP rate trending** | Is noise improving? | Baselined in discovery |
-| **Renewal signal** | Does sales reference alerting in renewals? | Yes/no, sales team |
+- Customer portal (open a case / tickets / contract / documents)
+- Templated monthly customer reports
+- License usage tracking (SentinelOne, Huntress, SNYPR)
+- Per-customer knowledge base
+- Recurring tasks (weekly platform checks)
+- CMDB for VDA internal devices
+- API key expiration tracking
+- Onboarding project templates with child tickets
 
-## Key man risk
+**Explicitly out of scope, permanently:**
 
-1. **Vanilla stack.** React + Supabase + standard hooks. No exotic libraries.
-2. **Documentation as a deliverable.** Every component has a header explaining *why*. `BUS_FACTOR.md` lists every dependency, secret, and decision.
-3. **The Lab tab.** Built-in natural-language feature request system. Any engineer can describe a change in plain English and get a spec, red tests, and sandbox preview. The tool extends itself.
+- Quotes, invoices, agreements
+- CRM (Salesforce stays)
+- Schedule-a-meeting integration
+- Full XDR / SIEM functionality (Sniper stays)
+- Project management across non-ticket workstreams (Monday stays)
 
-VDA owns the repo, the deployment, and the data from day one.
+## The 20-week plan
 
-## What's in the prototype today
+| Weeks | Phase | Deliverable |
+|-------|-------|-------------|
+| 1–2 | **Discover** | 13-question discovery doc back from Jim + Sibe. Slack channel live. Walk one live incident end-to-end in Sniper with Sibe. |
+| 3–5 | **MVP Ticketing** | Ticket core + Sniper bridge + email bridge + wrong-client prevention + SLA clock. |
+| 6–8 | **Pilot** | Two pilot customers. Sibe + one other analyst live in the tool daily. Daily Slack feedback. No new features — fix what breaks. |
+| 9–14 | **Portal + Reports** | Customer portal (four views). Templated monthly reports. Roll to remaining 148 customers in waves. |
+| 15–20 | **Adopt** | Named owner inside VDA. Weekly metric review. VDA engineers begin extending the repo independently. |
 
-- All four tabs functional in the engineer console
-- Mock alerts from 3 fictional clients with real MITRE ATT&CK technique IDs
-- Tufte dashboard with sparklines, small multiples, horizon chart, retrain timestamp
-- Three live learning loops, auto-reprioritization, playbook suggestions, boost rules
-- Mock agentic enrichment panel
-- Client confirmation loop
-- Lab tab with spec generation and live sandbox preview (mock-only, offline)
-- Client app: status, decision flow, clarity rating, criticality teach-back, confirmation toast
-- **Board PDF brief generator — 4-page McKinsey/BCG style, one click**
-- Auto light/dark theme on both apps
-- Live TDD test panels on both apps
-- Responsive mobile via JavaScript `isMobile` state
+## Measurement (deck slide 10 + 16)
 
-## What's not in the prototype
+Baselines come from sitting with Sibe in weeks 1–2, not from this document.
 
-- Real alert ingestion from VDA's tools (Week 1 backend)
-- Real auth and multi-analyst support (Week 1)
-- Persistent storage across sessions (Week 1)
-- Real enrichment from source APIs (Week 1)
-- Lab promote-to-staging Git integration (Week 5)
-- SOC 2 compliance layer (post-MVP)
+| Metric | What | Kill switch |
+|--------|------|-------------|
+| **Copy-paste count** | Manual data transfer events Sibe performs per day | Week 5: zero on pilot accounts or we stop and diagnose |
+| **MTTR** | Mean time to resolution per severity | Baselined weeks 1–2, tracked weekly after |
+| **SLA adherence %** | Percentage of tickets meeting severity SLA | Measured from week 5 onward |
+| **Wrong-client incidents** | Times customer A's data goes to customer B | Target: zero |
+| **Analyst adoption** | % of SOC using the tool for customer comms | 70% by week 8 or we stop |
 
 ## Next steps
 
-1. Meet with Seba. Validate or break this diagnosis.
-2. Get a list of the 3-5 alert sources VDA actually uses today.
-3. Pick the Week 1 backend (Supabase recommended).
-4. Lock the 5-week schedule and the staging URL.
-5. Begin Week 1 — ingestion bridge, red tests written first.
+1. **Questionnaire back from Jim + Sibe.** 13 questions, one page each. Delivered to them in the Slack channel.
+2. **Walk one live incident in Sniper with Sibe.** Document every click and copy-paste. This is the workflow the MVP eliminates.
+3. **Lock 5-week build scope in writing, signed by Kendall.** One page. No moving targets after.
+4. **Stand up the Supabase project.** Schema for tickets, customers, analysts, notes, SLA rules.
+5. **Begin week 3 build.**
 
 ---
 
-*Prepared as a discovery artifact. Not a contract — a starting point for a conversation.*
+*Prepared as a scoping artifact, not a contract. This is the starting point for the conversation — not the conclusion.*
