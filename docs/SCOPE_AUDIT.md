@@ -107,7 +107,7 @@ Not everything Vince said was v2/v3-specific. A few points translate:
 | **Dashboards** (Phase 2 tile) | Not in Jim's explicit four. Feels like Vince's "I love the dashboard" bleeding in. | If Jim ignores it in Q7/Q8, cut it. |
 | **Knowledge base** (Phase 2 tile) | Not in Jim's explicit four. We invented this. | Likely cuttable — Jim didn't mention a KB need. |
 | **Services** (Phase 2 tile) | Overlaps with Contract tile. Redundant. | Almost certainly cuttable — merge into Contract. |
-| **L3 "Full SNYPR flow" demo panel** | Implies we're building a SNYPR integration surface. We're not — Sibe writes the playbook on his side. | Relabel as "aspirational preview" OR cut after Jim's answer to Q5. |
+| **Stage 3 SNYPR flow demo view** | Still implies we're building a SNYPR integration surface if misread. Reality: we're not — Sibe writes the playbook on his side; we receive the webhook. | The rail+workspace rebuild moved this from a fourth desktop column to a cleanly separate nav-accessed view, which lowers the risk of misreading it as a built integration. Keep as demo; confirm framing with Jim's Q5 answer. |
 
 ### OUT-OF-SCOPE — considered, explicitly declined
 
