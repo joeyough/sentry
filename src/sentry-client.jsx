@@ -1,1490 +1,2893 @@
-// Sentry Client v4 — React/JSX
-// VDA Labs × 3Nails Infosec
-// Features: response timeline, SLA badge, animated noted pill,
-// BCG "The Take" banner, mobile-scaled inline PDF report preview.
+/**
+ * sentry-portal.jsx — VDA × 3Nails Customer Portal
+ *
+ * The customer-facing portal. Part of the ticketing system Sentry ships for VDA,
+ * built against the v4 scope from the discovery call with Jim, Sibe, and Kendall.
+ * Companion to sentry-analyst.jsx — they share the same ticket database, same
+ * soc@vdalabs.com inbound email bridge, and the same Securonix SNYPR integration.
+ *
+ * Four views in Phase 1 (per Jim's explicit call):
+ *   Home · Open a case · My Tickets · Documents
+ *
+ * Phase 2 expands to seven tiles with:
+ *   + Contract · Dashboards · Knowledge Base
+ *
+ * The Phase Toggle (top right) lets a viewer switch between scopes —
+ * doubles as a scope-communication device when showing this to Kendall or Jim.
+ *
+ * Halo tried to be a customer portal too, but expanded into quoting, invoicing,
+ * and agreements until it collapsed. This portal stays narrow on purpose.
+ *
+ * Design note: this portal is the public face of a system whose private face
+ * (sentry-analyst.jsx) eliminates manual email ↔ SNYPR copy-paste for Sibe's
+ * team and enforces wrong-client prevention on every outbound customer email.
+ * The portal exists because the ticketing layer needs a customer-facing surface;
+ * it is deliberately quiet about the internal workflow it's built on top of.
+ *
+ * Customer voice: plain-English, calm, past-tense for completed actions.
+ * No ticket IDs in body copy (they live in subject + metadata).
+ * No jargon, no scoring, no survey-style feedback widgets. A ticket portal,
+ * not a feedback platform.
+ *
+ * Brand tokens match the v3 design system and v4 deck:
+ *   navy #0A1628, burnt orange #D2691E, steel blue #6B93B8
+ *
+ * Font stack in the app runtime: Georgia display, Calibri body, Consolas mono.
+ * The standalone design-system doc (sentry-design-system-v3.html) uses the
+ * system font stack instead — this was a targeted workaround for an iOS Safari
+ * rendering bug specific to that doc's layout (sticky nav + backdrop-filter +
+ * Georgia at synthesized weights). The app runtime does not trigger that bug
+ * and keeps Georgia for its editorial feel (Security Report cover, portal
+ * greeting, ticket subject display).
+ */
 
 import React, { useState, useEffect, useRef } from "react";
+import {
+  AlertCircle, Archive, ArrowLeft, ArrowRight, BookOpen, Calendar, Check, ChevronRight,
+  Download, Eye, FileText, Folder, Gauge, HelpCircle, Home, Inbox, Lock, Mail,
+  MessageSquare, PlusCircle, Send, Shield, ShoppingCart, Sparkles,
+  TrendingDown, TrendingUp, User, Zap,
+} from "lucide-react";
 
-// ============================================================================
-// CLIENT CONTEXT + DATA
-// ============================================================================
-const CLIENT = {
-  name: "Aspen Holdings",
-  industry: "Financial Services",
-  contact: "Jordan Mauriello",
-  ciso: "T. Reeves",
+/* ============================================================
+ * BRAND TOKENS — match design system v3
+ * ============================================================ */
+const T = {
+  // Dark frame (outer chrome, header)
+  bg: "#0A1628",
+  bgCard: "#122238",
+  bgCardEdge: "#1A2E47",
+
+  // Light content area (portal is friendlier on white)
+  bgLight: "#F5F4F0",
+  bgLightCard: "#FFFFFF",
+  bgLightAlt: "#FAFAF7",
+
+  // Ink
+  ink: "#E8EEF4",
+  inkDim: "#A8B8C8",
+  inkMuted: "#6B7D91",
+  inkDark: "#1A2E47",
+  inkDarkDim: "#5A6A7D",
+  inkDarkMuted: "#8A97A5",
+
+  divider: "#2A3E57",
+  dividerLight: "#D8DCE2",
+
+  orange: "#D2691E",
+  orangeSoft: "#E89968",
+  orangeTint: "#FBF0E6",
+  steel: "#6B93B8",
+
+  sevCrit: "#D2691E",
+  sevHigh: "#D4A574",
+  sevMed: "#6B93B8",
+
+  slaOk: "#5B8F6F",
+  slaWarn: "#D4A574",
+  slaBreach: "#C95850",
+
+  fontDisplay: 'Georgia, "Times New Roman", serif',
+  fontBody: 'Calibri, "Segoe UI", system-ui, sans-serif',
+  fontMono: 'Consolas, "Courier New", monospace',
 };
 
-const initialItems = [
+/* ============================================================
+ * RESPONSIVE HOOK — JS-based (works in every sandbox, unlike @media)
+ * Matches the pattern documented in BUS_FACTOR.md
+ * ============================================================ */
+const useIsMobile = (breakpoint = 768) => {
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== "undefined" ? window.innerWidth < breakpoint : false
+  );
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < breakpoint);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, [breakpoint]);
+  return isMobile;
+};
+
+/* ============================================================
+ * MOCK DATA — this customer ("Acme Corp") has ~8 tickets
+ * ============================================================ */
+
+const THIS_CUSTOMER = {
+  id: "acme", name: "Acme Corp",
+  primaryContact: { name: "Kate Lin", email: "security@acme.com", role: "CISO" },
+  contract: {
+    tier: "Enterprise", startDate: "2025-01-15", renewalDate: "2026-01-15",
+    monthlySpend: "$24,500",
+    services: [
+      { name: "24/7 SOC Monitoring", status: "active", count: "342 endpoints" },
+      { name: "Managed SentinelOne", status: "active", count: "342 licenses" },
+      { name: "Managed Huntress", status: "active", count: "342 agents" },
+      { name: "Quarterly Penetration Testing", status: "scheduled", count: "Q2 2026 · May 12" },
+    ],
+  },
+};
+
+const NOW = new Date("2026-04-17T14:30:00Z").getTime();
+const mins = (n) => NOW - n * 60 * 1000;
+
+const CUSTOMER_TICKETS = [
   {
-    id: "I-001",
-    severity: "ATTENTION",
-    title: "Unusual login from new country",
-    headline: "Someone signed into your CFO's email from Lagos, Nigeria 14 minutes ago.",
-    context: "VDA's analysts checked: this isn't on Tom's typical travel pattern. We've temporarily blocked the session and want your call before reaching out to him directly.",
-    recommendation: "Approve the block and we'll call Tom now to verify.",
-    asset: "Tom Webb · CFO · O365 mailbox",
-    handledBy: "T. Reeves",
-    timeReceived: Date.now() - 14 * 60 * 1000,
-    requiresClient: true,
-    decision: null,
-    sla: "15 min",
-    slaRemaining: "12 min",
-    timeline: [
-      { label: "Suspicious login detected", meta: "14 min ago", status: "done" },
-      { label: "Session isolated by VDA", meta: "12 min ago · T. Reeves", status: "done" },
-      { label: "Account placed on hold", meta: "12 min ago", status: "done" },
-      { label: "Threat intel cross-reference complete", meta: "8 min ago · matched 3 related events", status: "done" },
-      { label: "Awaiting your decision", meta: "SLA: call Tom within 15 min of approval", status: "current" },
+    id: "VDA-1847", severity: "critical", status: "in-progress",
+    subject: "Unusual login activity on your CFO's account",
+    customerFacing: "We detected an unusual sign-in to Tom Webb's account from Lagos, Nigeria. We've isolated the session and blocked further activity. Waiting on your confirmation that Tom is not currently traveling.",
+    createdAt: mins(42), lastUpdate: mins(35),
+    thread: [
+      { from: "VDA", at: mins(35),
+        body: "We've detected an unusual sign-in to your CFO's account from Lagos, Nigeria. Session has been isolated. Please confirm whether Tom is currently traveling." },
     ],
   },
   {
-    id: "I-002",
-    severity: "WORKING",
-    title: "Phishing campaign targeting finance team",
-    headline: "5 phishing emails impersonating your bank were caught before delivery.",
-    context: "Standard campaign, no one clicked. We're updating the rule so future variants are blocked automatically.",
-    recommendation: "No action needed. We'll include this in your weekly digest.",
-    asset: "Email gateway · 5 messages",
-    handledBy: "M. Chen",
-    timeReceived: Date.now() - 2 * 60 * 60 * 1000,
-    requiresClient: false,
-    decision: null,
-    sla: "informational",
-    timeline: [
-      { label: "Phishing pattern detected", meta: "2h ago", status: "done" },
-      { label: "Messages quarantined pre-delivery", meta: "2h ago · auto-response", status: "done" },
-      { label: "Sender reputation updated", meta: "1h 50m ago", status: "done" },
-      { label: "Detection rule tuned", meta: "30m ago · M. Chen", status: "done" },
-      { label: "Included in weekly digest", meta: "no further action", status: "current" },
+    id: "VDA-1844", severity: "medium", status: "resolved",
+    subject: "SSL certificate renewal heads-up",
+    customerFacing: "api.acme.com's certificate is set to expire in 28 days. You've confirmed renewal is scheduled.",
+    createdAt: mins(1440), lastUpdate: mins(700),
+    thread: [
+      { from: "VDA", at: mins(1430),
+        body: "Heads up — your api.acme.com SSL certificate expires in 28 days." },
+      { from: "You", at: mins(720),
+        body: "Thanks — renewal scheduled. Close ticket." },
+      { from: "VDA", at: mins(700),
+        body: "Marked resolved. Renewal calendar confirmed." },
     ],
   },
   {
-    id: "I-003",
-    severity: "WORKING",
-    title: "Patch deployed to trading server",
-    headline: "Critical security patch applied to SVR-TRADE-07 during maintenance window.",
-    context: "Routine. Server back online, all checks green.",
-    recommendation: "FYI only.",
-    asset: "SVR-TRADE-07",
-    handledBy: "T. Reeves",
-    timeReceived: Date.now() - 5 * 60 * 60 * 1000,
-    requiresClient: false,
-    decision: null,
-    sla: "informational",
-    timeline: [
-      { label: "Patch release scheduled", meta: "yesterday 6:00 PM", status: "done" },
-      { label: "Pre-deployment snapshot taken", meta: "5h ago", status: "done" },
-      { label: "Patch applied in maintenance window", meta: "5h ago · T. Reeves", status: "done" },
-      { label: "Post-patch health checks green", meta: "4h 30m ago", status: "done" },
-      { label: "Closed · recorded in digest", meta: "no further action", status: "current" },
+    id: "VDA-1841", severity: "low", status: "open",
+    subject: "New user provisioning",
+    customerFacing: "HR flagged three new engineers starting Monday. We've noted the request and will add them to your monitoring scope.",
+    createdAt: mins(15), lastUpdate: mins(15),
+    thread: [
+      { from: "You", at: mins(15),
+        body: "Three new engineers starting Monday — please add to your monitoring scope." },
     ],
+  },
+  {
+    id: "VDA-1839", severity: "high", status: "open",
+    subject: "Data egress alert — 2.3GB outbound transfer",
+    customerFacing: "Our monitoring flagged a large outbound transfer from your network to an unknown S3 bucket. Our team is investigating the source and destination.",
+    createdAt: mins(8), lastUpdate: mins(8),
+    thread: [],
+  },
+  {
+    id: "VDA-1836", severity: "critical", status: "resolved",
+    subject: "Ransomware pattern contained on staging VM",
+    customerFacing: "A known ransomware indicator matched activity on your staging VM last week. It was automatically contained and your team restored from snapshot.",
+    createdAt: mins(10080), lastUpdate: mins(9000),
+    thread: [
+      { from: "VDA", at: mins(10050),
+        body: "A ransomware indicator matched on your staging VM. Isolated automatically. Requesting restore-from-snapshot confirmation." },
+      { from: "You", at: mins(9000),
+        body: "Snapshot restored, VM rebuilt from gold image. Thanks." },
+    ],
+  },
+  {
+    id: "VDA-1832", severity: "medium", status: "resolved",
+    subject: "Monthly compliance summary — March",
+    customerFacing: "March compliance: all green. No dropped MFA enrollments, no overdue patches.",
+    createdAt: mins(25000), lastUpdate: mins(24800),
+    thread: [],
+  },
+  {
+    id: "VDA-1820", severity: "low", status: "resolved",
+    subject: "Weekly vulnerability scan — week of Apr 7",
+    customerFacing: "3 medium findings this week. All have available patches. We've flagged them in your dashboard.",
+    createdAt: mins(14400), lastUpdate: mins(14300),
+    thread: [],
+  },
+  {
+    id: "VDA-1815", severity: "high", status: "resolved",
+    subject: "Phishing campaign blocked (AP team)",
+    customerFacing: "We blocked 12 phishing emails targeting your accounts-payable team last Tuesday. All were quarantined.",
+    createdAt: mins(20000), lastUpdate: mins(19900),
+    thread: [],
   },
 ];
 
-function buildHistory() {
-  let seed = 42;
-  const rand = () => {
-    seed = (seed * 9301 + 49297) % 233280;
-    return seed / 233280;
-  };
-  const days = [];
-  for (let i = 0; i < 30; i++) {
-    days.push({
-      ingested: Math.floor(800 + rand() * 600),
-      escalated: Math.floor(rand() * 3),
-    });
-  }
-  return days;
-}
+const DOCUMENTS = [
+  { id: "d1", name: "Service Level Agreement · 2025–2026", kind: "Contract", updated: "Jan 15, 2025" },
+  { id: "d2", name: "SOC Response Playbook · Acme", kind: "Runbook", updated: "Mar 30, 2026" },
+  { id: "d3", name: "Incident Communication Preferences", kind: "Preferences", updated: "Feb 12, 2026" },
+  { id: "d4", name: "Q1 2026 Security Review", kind: "Report", updated: "Apr 3, 2026" },
+  { id: "d5", name: "Onboarding Runbook · Acme", kind: "Runbook", updated: "Jan 20, 2025" },
+  { id: "d6", name: "Annual Penetration Test · 2025", kind: "Report", updated: "Dec 4, 2025" },
+];
 
-// ============================================================================
-// THEME TOKENS — single object, no CSS vars needed (React handles it)
-// ============================================================================
-const lightTokens = {
-  bg: "#fbfaf7",
-  bodyBg: "#e8e6e0",
-  surface: "#ffffff",
-  surfaceHi: "#f4f1eb",
-  text: "#1a1816",
-  textDim: "#7a756d",
-  textMid: "#5a5550",
-  border: "rgba(0,0,0,0.06)",
-  borderStrong: "rgba(0,0,0,0.12)",
-  brand: "#c83e00",
-  brandDim: "rgba(200, 62, 0, 0.06)",
-  brandEdge: "rgba(200, 62, 0, 0.25)",
-  onBrand: "#ffffff",
-  statusClear: "#4a6b54",
-  statusWorking: "#a8651e",
-  statusAttention: "#a83a32",
-  statusClearDim: "rgba(74, 107, 84, 0.08)",
-  statusWorkingDim: "rgba(168, 101, 30, 0.08)",
-  statusAttentionDim: "rgba(168, 58, 50, 0.08)",
-  phoneShadow: "0 30px 80px rgba(0,0,0,0.18), 0 0 0 8px #fafaf7, 0 0 0 9px #d8d4cc",
-  brandGrad: "linear-gradient(135deg, rgba(200,62,0,0.10) 0%, rgba(200,62,0,0.02) 100%)",
-  teachGrad: "linear-gradient(135deg, rgba(200,62,0,0.08) 0%, rgba(200,62,0,0.02) 100%)",
-  timelineGrad: "linear-gradient(135deg, rgba(74,107,84,0.06) 0%, rgba(74,107,84,0.02) 100%)",
-  slaBorder: "rgba(74,107,84,0.3)",
-  timelineBorder: "rgba(74,107,84,0.25)",
-};
+const KB_ARTICLES = [
+  { id: "k1", title: "What counts as a critical security event?", category: "Basics" },
+  { id: "k2", title: "How to confirm a team member's travel plans during an investigation", category: "Response" },
+  { id: "k3", title: "Understanding your monthly security report", category: "Reports" },
+  { id: "k4", title: "Requesting changes to your monitoring scope", category: "Scope" },
+  { id: "k5", title: "After-hours incident escalation", category: "Response" },
+  { id: "k6", title: "How VDA handles your data", category: "Privacy" },
+];
 
-const darkTokens = {
-  bg: "#0e0f10",
-  bodyBg: "#050505",
-  surface: "#16181a",
-  surfaceHi: "#1d1f22",
-  text: "#f5f3ee",
-  textDim: "#8a8680",
-  textMid: "#a8a49d",
-  border: "rgba(255,255,255,0.06)",
-  borderStrong: "rgba(255,255,255,0.12)",
-  brand: "#ff5722",
-  brandDim: "rgba(255, 87, 34, 0.12)",
-  brandEdge: "rgba(255, 87, 34, 0.35)",
-  onBrand: "#ffffff",
-  statusClear: "#9bb5a3",
-  statusWorking: "#d4a574",
-  statusAttention: "#c95850",
-  statusClearDim: "rgba(155, 181, 163, 0.12)",
-  statusWorkingDim: "rgba(212, 165, 116, 0.12)",
-  statusAttentionDim: "rgba(201, 88, 80, 0.12)",
-  phoneShadow: "0 30px 80px rgba(0,0,0,0.7), 0 0 0 8px #18181a, 0 0 0 9px #2a2a2c",
-  brandGrad: "linear-gradient(135deg, rgba(255,87,34,0.15) 0%, rgba(255,87,34,0.05) 100%)",
-  teachGrad: "linear-gradient(135deg, rgba(255,87,34,0.14) 0%, rgba(255,87,34,0.04) 100%)",
-  timelineGrad: "linear-gradient(135deg, rgba(155,181,163,0.08) 0%, rgba(155,181,163,0.02) 100%)",
-  slaBorder: "rgba(155,181,163,0.3)",
-  timelineBorder: "rgba(155,181,163,0.25)",
-};
-
-// ============================================================================
-// ICONS — inline SVG (Lucide style)
-// ============================================================================
-const Icon = ({ name, size = 16, style = {} }) => {
-  const common = {
-    width: size,
-    height: size,
-    viewBox: "0 0 24 24",
-    fill: "none",
-    stroke: "currentColor",
-    strokeWidth: 2,
-    strokeLinecap: "round",
-    strokeLinejoin: "round",
-    style: { flexShrink: 0, ...style },
-  };
-  switch (name) {
-    case "checkCircle":
-      return (
-        <svg {...common}>
-          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-          <polyline points="22 4 12 14.01 9 11.01" />
-        </svg>
-      );
-    case "loader":
-      return (
-        <svg {...common} style={{ ...common.style, animation: "sentry-spin 8s linear infinite" }}>
-          <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-        </svg>
-      );
-    case "alert":
-      return (
-        <svg {...common}>
-          <circle cx="12" cy="12" r="10" />
-          <line x1="12" y1="8" x2="12" y2="12" />
-          <line x1="12" y1="16" x2="12.01" y2="16" />
-        </svg>
-      );
-    case "chevronR":
-      return (
-        <svg {...common}>
-          <polyline points="9 18 15 12 9 6" />
-        </svg>
-      );
-    case "chevronL":
-      return (
-        <svg {...common}>
-          <polyline points="15 18 9 12 15 6" />
-        </svg>
-      );
-    case "calendar":
-      return (
-        <svg {...common}>
-          <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-          <line x1="16" y1="2" x2="16" y2="6" />
-          <line x1="8" y1="2" x2="8" y2="6" />
-          <line x1="3" y1="10" x2="21" y2="10" />
-        </svg>
-      );
-    case "target":
-      return (
-        <svg {...common}>
-          <circle cx="12" cy="12" r="10" />
-          <circle cx="12" cy="12" r="6" />
-          <circle cx="12" cy="12" r="2" />
-        </svg>
-      );
-    case "arrowUp":
-      return (
-        <svg {...common} strokeWidth={2.2}>
-          <line x1="12" y1="19" x2="12" y2="5" />
-          <polyline points="5 12 12 5 19 12" />
-        </svg>
-      );
-    case "arrowDown":
-      return (
-        <svg {...common} strokeWidth={2.2}>
-          <line x1="12" y1="5" x2="12" y2="19" />
-          <polyline points="19 12 12 19 5 12" />
-        </svg>
-      );
-    case "check":
-      return (
-        <svg {...common} strokeWidth={2.5}>
-          <polyline points="20 6 9 17 4 12" />
-        </svg>
-      );
-    case "checkSm":
-      return (
-        <svg {...common} strokeWidth={3}>
-          <polyline points="20 6 9 17 4 12" />
-        </svg>
-      );
-    case "file":
-      return (
-        <svg {...common}>
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-          <polyline points="14 2 14 8 20 8" />
-        </svg>
-      );
-    case "printer":
-      return (
-        <svg {...common}>
-          <polyline points="6 9 6 2 18 2 18 9" />
-          <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
-          <rect x="6" y="14" width="12" height="8" />
-        </svg>
-      );
-    case "download":
-      return (
-        <svg {...common}>
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-          <polyline points="7 10 12 15 17 10" />
-          <line x1="12" y1="15" x2="12" y2="3" />
-        </svg>
-      );
-    case "activity":
-      return (
-        <svg {...common}>
-          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-        </svg>
-      );
-    default:
-      return null;
-  }
-};
-
-// ============================================================================
-// UTILITIES
-// ============================================================================
-function ago(ts) {
-  const m = Math.floor((Date.now() - ts) / 60000);
-  if (m < 1) return "just now";
-  if (m < 60) return m + "m ago";
+/* ============================================================
+ * HELPERS
+ * ============================================================ */
+const fmtAgo = (t) => {
+  const d = NOW - t;
+  const m = Math.floor(d / 60000);
+  if (m < 60) return `${m} min ago`;
   const h = Math.floor(m / 60);
-  if (h < 24) return h + "h ago";
-  return Math.floor(h / 24) + "d ago";
-}
+  if (h < 24) return `${h}h ago`;
+  const days = Math.floor(h / 24);
+  return `${days}d ago`;
+};
 
-function greet() {
-  const h = new Date().getHours();
-  if (h < 12) return "morning";
-  if (h < 17) return "afternoon";
-  return "evening";
-}
+const fmtDateShort = (t) => {
+  const d = new Date(t);
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+};
 
-function Sparkline({ values, color, width = 100, height = 32 }) {
-  const max = Math.max(...values);
-  const min = Math.min(...values);
-  const range = max - min || 1;
-  const pts = values
-    .map((v, i) => {
-      const x = (i / (values.length - 1)) * width;
-      const y = height - ((v - min) / range) * height;
-      return `${x},${y}`;
-    })
-    .join(" ");
-  const area = `0,${height} ${pts} ${width},${height}`;
-  const gradId = `sg-${Math.random().toString(36).slice(2, 8)}`;
-  return (
-    <svg width={width} height={height} style={{ overflow: "visible" }}>
-      <defs>
-        <linearGradient id={gradId} x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.25" />
-          <stop offset="100%" stopColor={color} stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <polygon points={area} fill={`url(#${gradId})`} />
-      <polyline points={pts} fill="none" stroke={color} strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
-    </svg>
-  );
-}
+// Customer-facing severity translation (no raw CRIT/HIGH/MEDIUM)
+const severityLanguage = (sev, status) => {
+  if (status === "resolved") return { label: "Resolved", color: T.slaOk };
+  if (sev === "critical") return { label: "Needs your attention", color: T.orange };
+  if (sev === "high") return { label: "We're working on it", color: T.sevHigh };
+  return { label: "Informational", color: T.steel };
+};
 
-// ============================================================================
-// GLOBAL ANIMATIONS + FONT INJECTION (runs once on mount)
-// ============================================================================
-const GLOBAL_STYLES = `
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Cormorant+Garamond:wght@400;500;600;700&display=swap');
-@keyframes sentry-spin { to { transform: rotate(360deg); } }
-@keyframes sentry-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }
-@keyframes sentry-fade-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes sentry-scale-in { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: scale(1); } }
-@keyframes sentry-slide-up { from { transform: translateY(100%); opacity: 0.7; } to { transform: translateY(0); opacity: 1; } }
-@keyframes sentry-noted-pop {
-  0% { transform: translateX(-50%) translateY(10px) scale(0.9); opacity: 0; }
-  20% { transform: translateX(-50%) translateY(0) scale(1.05); opacity: 1; }
-  35% { transform: translateX(-50%) translateY(0) scale(1); opacity: 1; }
-  80% { transform: translateX(-50%) translateY(0) scale(1); opacity: 1; }
-  100% { transform: translateX(-50%) translateY(-8px) scale(0.95); opacity: 0; }
-}
-@keyframes sentry-sla-pulse {
-  0%,100% { box-shadow: 0 0 0 0 rgba(74,107,84, 0.4); }
-  50% { box-shadow: 0 0 0 4px rgba(74,107,84, 0); }
-}
-@media print {
-  body > div > div:not(.sentry-report-overlay) { display: none !important; }
-  .sentry-report-overlay { position: static !important; background: white !important; }
-  .sentry-report-toolbar { display: none !important; }
-  .sentry-report-stage { background: white !important; padding: 0 !important; }
-  .sentry-report-scale-outer, .sentry-report-scale, .sentry-report-scale-inner {
-    transform: none !important;
-    width: 100% !important;
-    height: auto !important;
-  }
-  .sentry-report-page {
-    margin: 0 !important;
-    box-shadow: none !important;
-    page-break-after: always;
-    width: 100% !important;
-    height: auto !important;
-    transform: none !important;
-  }
-  .sentry-report-page:last-child { page-break-after: auto; }
-}
-`;
+/* ============================================================
+ * HEADER — navy, with phase toggle
+ * ============================================================ */
 
-function useGlobalStyles() {
-  useEffect(() => {
-    const id = "sentry-client-global-styles";
-    if (document.getElementById(id)) return;
-    const el = document.createElement("style");
-    el.id = id;
-    el.innerHTML = GLOBAL_STYLES;
-    document.head.appendChild(el);
-  }, []);
-}
-
-// ============================================================================
-// MAIN COMPONENT
-// ============================================================================
-export default function SentryClient() {
-  useGlobalStyles();
-
-  const [items, setItems] = useState(() => JSON.parse(JSON.stringify(initialItems)));
-  const [screen, setScreen] = useState("status");
-  const [activeItemId, setActiveItemId] = useState(null);
-  const [theme, setTheme] = useState("light");
-  const [history] = useState(() => buildHistory());
-  const [criticalityChoice, setCriticalityChoice] = useState(null);
-  const [clarityRating, setClarityRating] = useState(null);
-  const [showNotedAck, setShowNotedAck] = useState(false);
-  const [toast, setToast] = useState(null);
-  const [clock, setClock] = useState("");
-  const [reportOpen, setReportOpen] = useState(false);
-  const [reportScale, setReportScale] = useState(1);
-  const [reportScaledSize, setReportScaledSize] = useState({ width: 850, height: 1100 * 3 });
-
-  // Resolve tokens
-  const isDark =
-    theme === "dark" ||
-    (theme === "auto" && typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches);
-  const T = isDark ? darkTokens : lightTokens;
-
-  // Clock tick
-  useEffect(() => {
-    const tick = () => {
-      setClock(new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }));
-    };
-    tick();
-    const id = setInterval(tick, 30000);
-    return () => clearInterval(id);
-  }, []);
-
-  // Body bg follows theme
-  useEffect(() => {
-    document.body.style.background = T.bodyBg;
-    document.body.style.transition = "background 0.4s ease";
-  }, [T.bodyBg]);
-
-  // Report scale logic (mobile fit)
-  useEffect(() => {
-    if (!reportOpen) return;
-    const recalc = () => {
-      const vw = window.innerWidth;
-      const reportW = 850;
-      const reportH = (reportW * 11) / 8.5;
-      const pages = 4; // cover, exec, findings, methodology
-      const gap = 24;
-      const totalH = reportH * pages + gap * (pages - 1);
-      const available = vw - 40;
-      const s = Math.min(1, available / reportW);
-      setReportScale(s);
-      setReportScaledSize({ width: reportW * s, height: totalH * s });
-    };
-    recalc();
-    window.addEventListener("resize", recalc);
-    return () => window.removeEventListener("resize", recalc);
-  }, [reportOpen]);
-
-  // Noted ack auto-dismiss
-  useEffect(() => {
-    if (!showNotedAck) return;
-    const id = setTimeout(() => setShowNotedAck(false), 2400);
-    return () => clearTimeout(id);
-  }, [showNotedAck]);
-
-  // Toast auto-dismiss
-  useEffect(() => {
-    if (!toast) return;
-    const id = setTimeout(() => setToast(null), 4000);
-    return () => clearTimeout(id);
-  }, [toast]);
-
-  // --- derived ---
-  const openItems = items.filter((i) => i.decision === null);
-  const attention = openItems.filter((i) => i.requiresClient);
-  const working = openItems.filter((i) => !i.requiresClient);
-  const status = attention.length > 0 ? "ATTENTION" : working.length > 0 ? "WORKING" : "CLEAR";
-
-  // --- handlers ---
-  const goto = (s) => {
-    if (s !== "decision") {
-      setActiveItemId(null);
-      setCriticalityChoice(null);
-      setClarityRating(null);
-      setShowNotedAck(false);
-    }
-    setScreen(s);
-  };
-
-  const openItem = (id) => {
-    setActiveItemId(id);
-    setCriticalityChoice(null);
-    setClarityRating(null);
-    setShowNotedAck(false);
-    setScreen("decision");
-  };
-
-  const setCriticality = (val) => {
-    const isNew = criticalityChoice !== val;
-    setCriticalityChoice(isNew ? val : null);
-    if (isNew) setShowNotedAck(true);
-  };
-
-  const decide = (decision) => {
-    const item = items.find((i) => i.id === activeItemId);
-    if (!item) return;
-    const next = items.map((i) =>
-      i.id === activeItemId
-        ? { ...i, decision, decidedAt: Date.now(), clientConfirmed: decision === "APPROVED" }
-        : i,
-    );
-    setItems(next);
-    if (decision === "APPROVED") {
-      setToast("Your confirmation improved detection for this pattern across your environment.");
-    }
-    setActiveItemId(null);
-    setCriticalityChoice(null);
-    setClarityRating(null);
-    setShowNotedAck(false);
-    setScreen("status");
-  };
-
-  const openReport = () => setReportOpen(true);
-  const closeReport = () => setReportOpen(false);
-
-  const downloadReport = () => {
-    const today = new Date();
-    const docId = `VDA-${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, "0")}${String(today.getDate()).padStart(2, "0")}-${CLIENT.name.substring(0, 3).toUpperCase()}`;
-    const reportEl = document.querySelector(".sentry-report-pages");
-    if (!reportEl) return;
-    const reportHtml = reportEl.outerHTML;
-    const styles = Array.from(document.querySelectorAll("style"))
-      .map((s) => s.outerHTML)
-      .join("");
-    const fonts = `<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Cormorant+Garamond:wght@400;500;600;700&display=swap" rel="stylesheet">`;
-    const extraCss = `<style>body{background:#e8e6e0;padding:20px;margin:0;display:flex;justify-content:center;} .dl-wrapper{width:850px;max-width:100%;} .print-btn{position:fixed;top:20px;right:20px;z-index:999;background:#1a1a1a;color:#fff;border:none;padding:12px 20px;border-radius:6px;font-family:Inter,sans-serif;font-size:13px;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,0.2);} @media print{.print-btn{display:none;}body{background:#fff;padding:0;display:block;}.dl-wrapper{width:100%;}.sentry-report-page{box-shadow:none !important;margin:0 !important;transform:none !important;width:100% !important;height:auto !important;}}</style>`;
-    const standalone = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${CLIENT.name} · Security Posture Brief</title>${fonts}${styles}${extraCss}</head><body><button class="print-btn" onclick="window.print()">Print / Save as PDF</button><div class="dl-wrapper">${reportHtml}</div></body></html>`;
-    try {
-      const blob = new Blob([standalone], { type: "text/html;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${docId}-board-brief.html`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch (e) {
-      alert("Download failed. Use the Print button instead.");
-    }
-  };
-
-  // ==========================================================================
-  // STYLES (as JS objects, no CSS-in-JS lib needed)
-  // ==========================================================================
-  const S = buildStyles(T);
-
-  // ==========================================================================
-  // SCREENS
-  // ==========================================================================
-  const renderStatus = () => {
-    const recent = history.slice(-14);
-    const reviewed = recent.reduce((s, d) => s + d.ingested, 0);
-    const escalated = recent.reduce((s, d) => s + d.escalated, 0);
-    const handled = reviewed - escalated;
-    const quiet = recent.filter((d) => d.escalated === 0).length;
-
-    const cfg = {
-      CLEAR: {
-        color: T.statusClear,
-        dim: T.statusClearDim,
-        iconName: "checkCircle",
-        headline: "All clear",
-        sub: "VDA is monitoring. Nothing needs you right now.",
-      },
-      WORKING: {
-        color: T.statusWorking,
-        dim: T.statusWorkingDim,
-        iconName: "loader",
-        headline: "We're on it",
-        sub: `${working.length} ${working.length === 1 ? "item" : "items"} being handled. No action needed.`,
-      },
-      ATTENTION: {
-        color: T.statusAttention,
-        dim: T.statusAttentionDim,
-        iconName: "alert",
-        headline: "Your attention",
-        sub: `${attention.length} ${attention.length === 1 ? "decision" : "decisions"} only you can make.`,
-      },
-    }[status];
-
-    return (
-      <div style={{ animation: "sentry-fade-in 0.4s ease-out" }}>
-        <div style={S.greeting}>Good {greet()}, {CLIENT.contact.split(" ")[0]}</div>
-        <div style={S.clientName}>{CLIENT.name}</div>
-
-        <div style={{ ...S.card, ...S.cardLg, position: "relative", overflow: "hidden", animation: "sentry-scale-in 0.3s ease-out" }}>
-          <div style={{ position: "absolute", top: "-40%", right: "-20%", width: 240, height: 240, opacity: 0.08, filter: "blur(80px)", borderRadius: "50%", pointerEvents: "none", background: cfg.color }} />
-          <div style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center" }}>
-            <div style={{ width: 72, height: 72, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 20, background: cfg.dim, border: `1px solid ${cfg.color}30`, color: cfg.color }}>
-              <Icon name={cfg.iconName} size={32} />
-            </div>
-            <div style={S.statusHeadline}>{cfg.headline}</div>
-            <div style={S.statusSub}>{cfg.sub}</div>
-          </div>
-        </div>
-
-        {attention.length > 0 && (
-          <div style={{ marginBottom: 20 }}>
-            {attention.map((item) => (
-              <button key={item.id} onClick={() => openItem(item.id)} style={{ ...S.itemBtn, border: `1px solid ${isDark ? "rgba(201,88,80,0.4)" : "rgba(168,58,50,0.4)"}` }}>
-                <div style={{ ...S.eyebrow, color: T.statusAttention, fontWeight: 700, marginBottom: 8 }}>
-                  Needs your decision · SLA {item.sla}
-                </div>
-                <div style={S.itemTitle}>{item.title}</div>
-                <div style={S.itemBody}>{item.headline}</div>
-                <div style={S.itemMeta}>
-                  <span style={S.metaMono}>{ago(item.timeReceived)}</span>
-                  <span style={{ color: T.statusAttention }}><Icon name="chevronR" size={16} /></span>
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {working.length > 0 && (
-          <button onClick={() => goto("active")} style={S.workingSummary}>
-            <div>
-              <div style={{ ...S.eyebrow, marginBottom: 4 }}>VDA is handling</div>
-              <div style={{ fontFamily: "'Fraunces', serif", fontSize: 16, color: T.text }}>
-                {working.length} {working.length === 1 ? "item" : "items"} in progress
-              </div>
-            </div>
-            <span style={{ color: T.textDim }}><Icon name="chevronR" size={16} /></span>
-          </button>
-        )}
-
-        <div style={S.card}>
-          <div style={{ ...S.eyebrow, marginBottom: 12 }}>Last 14 days</div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 16 }}>
-            <div>
-              <div style={S.statBig}>{handled.toLocaleString()}</div>
-              <div style={S.statLabel}>alerts handled without you</div>
-            </div>
-            <Sparkline values={recent.map((d) => d.ingested)} color={T.brand} />
-          </div>
-          <div style={S.divider} />
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
-            {[
-              { label: "Reviewed", val: reviewed.toLocaleString() },
-              { label: "Escalated", val: escalated },
-              { label: "Quiet days", val: quiet },
-            ].map((m) => (
-              <div key={m.label}>
-                <div style={{ fontFamily: "'JetBrains Mono', monospace", color: T.textDim, fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", fontWeight: 600 }}>{m.label}</div>
-                <div style={{ color: T.text, fontWeight: 500, marginTop: 3, fontSize: 13 }}>{m.val}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <button onClick={() => goto("digest")} style={S.reportCta}>
-          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-            <div style={{ ...S.reportCtaIcon, color: T.brand }}><Icon name="calendar" size={16} /></div>
-            <div style={{ textAlign: "left", lineHeight: 1.3 }}>
-              <div style={{ ...S.eyebrow, color: T.brand, fontWeight: 700, letterSpacing: "0.22em", marginBottom: 2 }}>New · Ready</div>
-              <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, color: T.text, letterSpacing: "-0.005em" }}>This week's report</div>
-            </div>
-          </div>
-          <span style={{ color: T.brand }}><Icon name="chevronR" size={16} /></span>
+const PhaseToggle = ({ phase, setPhase }) => (
+  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+    <span style={{
+      fontFamily: T.fontMono, fontSize: 9, letterSpacing: "0.2em",
+      color: T.inkMuted, textTransform: "uppercase", marginRight: 6,
+    }}>Scope</span>
+    {[
+      { id: "p1", label: "Phase 1", sub: "5-week MVP · 4 tiles" },
+      { id: "p2", label: "Phase 2", sub: "Weeks 9–14 · 7 tiles" },
+    ].map((p) => {
+      const active = phase === p.id;
+      return (
+        <button
+          key={p.id}
+          onClick={() => setPhase(p.id)}
+          title={p.sub}
+          style={{
+            padding: "6px 12px", borderRadius: 3, cursor: "pointer",
+            background: active ? T.orange : "transparent",
+            color: active ? "#fff" : T.inkDim,
+            border: `1px solid ${active ? T.orange : T.divider}`,
+            fontFamily: T.fontMono, fontSize: 10, fontWeight: 700,
+            letterSpacing: "0.1em", textTransform: "uppercase",
+          }}
+        >
+          {p.label}
         </button>
-      </div>
-    );
-  };
+      );
+    })}
+  </div>
+);
 
-  const renderActive = () => (
-    <div style={{ animation: "sentry-fade-in 0.4s ease-out" }}>
-      <button onClick={() => goto("status")} style={S.btnBack}>
-        <Icon name="chevronL" size={14} /> Back
-      </button>
-      <div style={{ fontFamily: "'Fraunces', serif", fontSize: 28, color: T.text, marginBottom: 8, letterSpacing: "-0.01em" }}>
-        Active items
+const Header = ({ phase, setPhase, currentView, goHome }) => {
+  const isMobile = useIsMobile();
+  return (
+    <div style={{
+      display: "flex",
+      flexDirection: isMobile ? "column" : "row",
+      alignItems: isMobile ? "stretch" : "center",
+      justifyContent: "space-between",
+      gap: isMobile ? 12 : 0,
+      padding: isMobile ? "14px 18px" : "14px 30px",
+      background: T.bg, color: T.ink,
+      borderBottom: `1px solid ${T.divider}`, position: "sticky", top: 0, zIndex: 10,
+    }}>
+      {/* Row 1 on mobile: logo + avatar (avatar gets bumped up) */}
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
+      }}>
+        <div style={{
+          display: "flex", alignItems: "center", gap: 12, cursor: "pointer",
+        }} onClick={goHome}>
+          <div style={{
+            width: 28, height: 28, borderRadius: 4,
+            background: "rgba(210,105,30,0.14)",
+            border: `1px solid rgba(210,105,30,0.35)`,
+            display: "flex", alignItems: "center", justifyContent: "center", color: T.orange,
+            flexShrink: 0,
+          }}><Shield size={15} /></div>
+          <div>
+            <div style={{
+              fontFamily: T.fontMono, fontSize: 9, letterSpacing: "0.22em",
+              color: T.inkMuted, textTransform: "uppercase",
+            }}>VDA LABS</div>
+            <div style={{
+              fontFamily: T.fontMono, fontSize: 11, letterSpacing: "0.22em",
+              color: T.ink, fontWeight: 700, textTransform: "uppercase",
+            }}>SENTRY · PORTAL</div>
+          </div>
+        </div>
+
+        {/* Avatar shown in row 1 on mobile; stays in row 3 slot on desktop */}
+        {isMobile && (
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{
+              width: 32, height: 32, borderRadius: "50%",
+              background: T.orangeTint, color: T.orange,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontFamily: T.fontMono, fontSize: 12, fontWeight: 700,
+            }}>KL</div>
+          </div>
+        )}
       </div>
-      <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: T.textDim, marginBottom: 28, letterSpacing: "0.08em" }}>
-        {openItems.length} {openItems.length === 1 ? "ITEM" : "ITEMS"} IN PROGRESS
+
+      {/* Phase toggle */}
+      <div style={{
+        display: "flex", justifyContent: isMobile ? "center" : "flex-start",
+        order: isMobile ? 2 : 0,
+      }}>
+        <PhaseToggle phase={phase} setPhase={setPhase} />
       </div>
-      {openItems.map((item) => {
-        const isAttn = item.requiresClient;
-        const accent = isAttn ? T.statusAttention : T.statusWorking;
-        return (
-          <button key={item.id} onClick={() => openItem(item.id)} style={{
-            ...S.itemBtn,
-            borderLeft: `3px solid ${accent}`,
-          }}>
-            <div style={{ ...S.eyebrow, color: accent, fontWeight: 700, marginBottom: 8 }}>
-              {isAttn ? `Needs decision · SLA ${item.sla}` : "Handling"}
+
+      {/* Desktop-only: user identity on the right */}
+      {!isMobile && (
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontFamily: T.fontBody, fontSize: 12, color: T.ink, fontWeight: 500 }}>
+              {THIS_CUSTOMER.primaryContact.name}
             </div>
-            <div style={{ ...S.itemTitle, fontSize: 16 }}>{item.title}</div>
-            <div style={{ ...S.itemBody, fontSize: 12 }}>{item.headline}</div>
-            <div style={S.itemMeta}>
-              <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 11, color: T.textDim }}>by {item.handledBy}</span>
-              <span style={S.metaMono}>{ago(item.timeReceived)}</span>
+            <div style={{ fontFamily: T.fontMono, fontSize: 9, color: T.inkMuted, letterSpacing: "0.12em" }}>
+              {THIS_CUSTOMER.name}
+            </div>
+          </div>
+          <div style={{
+            width: 32, height: 32, borderRadius: "50%",
+            background: T.orangeTint, color: T.orange,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontFamily: T.fontMono, fontSize: 12, fontWeight: 700,
+          }}>KL</div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/* ============================================================
+ * HOME — tile grid
+ * ============================================================ */
+
+const PHASE_1_TILES = [
+  { id: "open", icon: PlusCircle, title: "Open a case", sub: "Let us know what you're seeing", primary: true },
+  { id: "tickets", icon: Inbox, title: "My tickets", sub: "View open and closed cases" },
+  { id: "contract", icon: FileText, title: "Contract", sub: "Your agreement at a glance" },
+  { id: "documents", icon: Folder, title: "Documents", sub: "Reports, runbooks, records" },
+];
+
+const PHASE_2_TILES = [
+  { id: "open", icon: PlusCircle, title: "Open a case", sub: "Let us know what you're seeing", primary: true },
+  { id: "report", icon: Sparkles, title: "Security Report", sub: "This month, tailored for you", highlight: true },
+  { id: "tickets", icon: Inbox, title: "My tickets", sub: "View open and closed cases" },
+  { id: "contract", icon: FileText, title: "Contract", sub: "Your agreement at a glance" },
+  { id: "documents", icon: Folder, title: "Documents", sub: "Reports, runbooks, records" },
+  { id: "dashboards", icon: Gauge, title: "Dashboards", sub: "Security posture at a glance" },
+  { id: "kb", icon: HelpCircle, title: "Knowledge base", sub: "Common questions, answered" },
+  { id: "services", icon: ShoppingCart, title: "Services", sub: "What's covered by your contract" },
+];
+
+const Tile = ({ tile, onClick, isMobile }) => {
+  const Icon = tile.icon;
+  const isHighlight = tile.highlight;
+  return (
+    <button onClick={() => onClick(tile.id)} style={{
+      background: isHighlight
+        ? "linear-gradient(135deg, #FFFFFF 0%, #FDF6EE 100%)"
+        : T.bgLightCard,
+      border: `1px solid ${isHighlight ? "rgba(210,105,30,0.28)" : T.dividerLight}`,
+      borderRadius: 6,
+      padding: isMobile ? 20 : 28, textAlign: "left", cursor: "pointer",
+      borderLeft: tile.primary
+        ? `3px solid ${T.orange}`
+        : isHighlight
+          ? `3px solid ${T.orange}`
+          : `1px solid ${T.dividerLight}`,
+      boxShadow: isHighlight
+        ? "0 2px 8px rgba(210,105,30,0.12)"
+        : "0 1px 2px rgba(0,0,0,0.04)",
+      transition: "all 160ms ease",
+      display: "flex", flexDirection: "column",
+      gap: isMobile ? 10 : 14,
+      minHeight: isMobile ? 120 : 148,
+      position: "relative",
+    }}
+    onMouseEnter={(e) => {
+      e.currentTarget.style.boxShadow = isHighlight
+        ? "0 6px 20px rgba(210,105,30,0.18)"
+        : "0 4px 14px rgba(0,0,0,0.08)";
+      e.currentTarget.style.transform = "translateY(-1px)";
+    }}
+    onMouseLeave={(e) => {
+      e.currentTarget.style.boxShadow = isHighlight
+        ? "0 2px 8px rgba(210,105,30,0.12)"
+        : "0 1px 2px rgba(0,0,0,0.04)";
+      e.currentTarget.style.transform = "translateY(0)";
+    }}
+    >
+      {isHighlight && (
+        <span style={{
+          position: "absolute", top: 12, right: 12,
+          fontFamily: T.fontMono, fontSize: 8, letterSpacing: "0.2em",
+          color: T.orange, fontWeight: 700, textTransform: "uppercase",
+          background: "rgba(210,105,30,0.1)",
+          border: "1px solid rgba(210,105,30,0.3)",
+          borderRadius: 999, padding: "3px 8px",
+        }}>NEW</span>
+      )}
+      <div style={{
+        width: isMobile ? 38 : 44, height: isMobile ? 38 : 44, borderRadius: 8,
+        background: tile.primary
+          ? T.orangeTint
+          : isHighlight
+            ? "linear-gradient(135deg, rgba(210,105,30,0.12) 0%, rgba(210,105,30,0.06) 100%)"
+            : "#EEF0F3",
+        color: tile.primary || isHighlight ? T.orange : T.steel,
+        display: "flex", alignItems: "center", justifyContent: "center",
+      }}><Icon size={isMobile ? 18 : 22} /></div>
+      <div>
+        <div style={{
+          fontFamily: T.fontDisplay, fontSize: isMobile ? 17 : 20, color: T.inkDark,
+          fontWeight: 500, lineHeight: 1.2, marginBottom: 4,
+        }}>{tile.title}</div>
+        <div style={{
+          fontFamily: T.fontBody, fontSize: isMobile ? 12 : 13, color: T.inkDarkDim, lineHeight: 1.45,
+        }}>{tile.sub}</div>
+      </div>
+    </button>
+  );
+};
+
+const HomeView = ({ phase, tickets, onNavigate }) => {
+  const isMobile = useIsMobile();
+  const openCount = tickets.filter((t) => t.status !== "resolved").length;
+  const tiles = phase === "p1" ? PHASE_1_TILES : PHASE_2_TILES;
+
+  return (
+    <div style={{
+      maxWidth: 1060, margin: "0 auto",
+      padding: isMobile ? "28px 18px" : "40px 30px",
+    }}>
+      {/* Greeting */}
+      <div style={{ marginBottom: isMobile ? 24 : 32 }}>
+        <div style={{
+          fontFamily: T.fontMono, fontSize: 10, letterSpacing: "0.2em",
+          color: T.orange, fontWeight: 700, textTransform: "uppercase", marginBottom: 10,
+        }}>Welcome back</div>
+        <div style={{
+          fontFamily: T.fontDisplay, fontSize: isMobile ? 32 : 44, color: T.inkDark,
+          fontWeight: 400, lineHeight: 1.1, marginBottom: 4,
+        }}>Good afternoon, {THIS_CUSTOMER.primaryContact.name.split(" ")[0]}.</div>
+      </div>
+
+      {/* Open cases status card — prominent and clickable */}
+      {(() => {
+        const needsAttention = tickets.filter((t) =>
+          (t.severity === "critical" || t.severity === "high") && t.status !== "resolved"
+        ).length;
+        const inProgress = openCount - needsAttention;
+
+        if (openCount === 0) {
+          return (
+            <div style={{
+              marginBottom: isMobile ? 28 : 36,
+              padding: isMobile ? "18px 20px" : "22px 26px",
+              background: T.bgLightCard,
+              border: `1px solid ${T.dividerLight}`,
+              borderLeft: `3px solid ${T.slaOk}`,
+              borderRadius: 6,
+              display: "flex", alignItems: "center", gap: 14,
+            }}>
+              <div style={{
+                width: 38, height: 38, borderRadius: "50%",
+                background: `${T.slaOk}18`, color: T.slaOk,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                flexShrink: 0,
+              }}><Check size={18} /></div>
+              <div style={{
+                fontFamily: T.fontDisplay, fontSize: isMobile ? 17 : 20,
+                color: T.inkDark, lineHeight: 1.35,
+              }}>
+                A quiet afternoon — nothing needs you right now.
+              </div>
+            </div>
+          );
+        }
+
+        return (
+          <button
+            onClick={() => onNavigate("tickets")}
+            style={{
+              marginBottom: isMobile ? 28 : 36,
+              width: "100%", textAlign: "left", cursor: "pointer",
+              padding: isMobile ? "18px 20px" : "22px 26px",
+              background: needsAttention > 0
+                ? "linear-gradient(135deg, #FFFFFF 0%, #FDF6EE 100%)"
+                : T.bgLightCard,
+              border: `1px solid ${needsAttention > 0 ? "rgba(210,105,30,0.28)" : T.dividerLight}`,
+              borderLeft: `3px solid ${needsAttention > 0 ? T.orange : T.steel}`,
+              borderRadius: 6,
+              display: "flex", alignItems: "center", gap: 16,
+              boxShadow: needsAttention > 0
+                ? "0 2px 8px rgba(210,105,30,0.10)"
+                : "0 1px 2px rgba(0,0,0,0.04)",
+              transition: "all 160ms ease",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.boxShadow = needsAttention > 0
+                ? "0 6px 18px rgba(210,105,30,0.16)"
+                : "0 4px 12px rgba(0,0,0,0.08)";
+              e.currentTarget.style.transform = "translateY(-1px)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.boxShadow = needsAttention > 0
+                ? "0 2px 8px rgba(210,105,30,0.10)"
+                : "0 1px 2px rgba(0,0,0,0.04)";
+              e.currentTarget.style.transform = "translateY(0)";
+            }}
+          >
+            <div style={{
+              width: isMobile ? 44 : 52, height: isMobile ? 44 : 52, borderRadius: "50%",
+              background: needsAttention > 0 ? T.orangeTint : `${T.steel}18`,
+              color: needsAttention > 0 ? T.orange : T.steel,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              flexShrink: 0,
+            }}>
+              {needsAttention > 0
+                ? <AlertCircle size={isMobile ? 22 : 26} />
+                : <Inbox size={isMobile ? 22 : 26} />
+              }
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{
+                display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap",
+                marginBottom: 4,
+              }}>
+                <span style={{
+                  fontFamily: T.fontDisplay, fontSize: isMobile ? 26 : 32,
+                  color: needsAttention > 0 ? T.orange : T.inkDark,
+                  fontWeight: 500, lineHeight: 1,
+                }}>{openCount}</span>
+                <span style={{
+                  fontFamily: T.fontDisplay, fontSize: isMobile ? 18 : 22,
+                  color: T.inkDark, fontWeight: 400, lineHeight: 1.2,
+                }}>
+                  open case{openCount === 1 ? "" : "s"}
+                </span>
+              </div>
+              <div style={{
+                fontFamily: T.fontBody, fontSize: isMobile ? 13 : 14,
+                color: T.inkDarkDim, lineHeight: 1.45,
+              }}>
+                {needsAttention > 0 ? (
+                  <>
+                    <span style={{ color: T.orange, fontWeight: 600 }}>
+                      {needsAttention} need{needsAttention === 1 ? "s" : ""} your attention
+                    </span>
+                    {inProgress > 0 && <> · {inProgress} in progress with VDA</>}
+                  </>
+                ) : (
+                  <>VDA is working on all of them — nothing needs you right now.</>
+                )}
+              </div>
+            </div>
+            <div style={{
+              display: "flex", alignItems: "center", gap: 6,
+              flexShrink: 0, color: T.inkDarkDim,
+            }}>
+              {!isMobile && (
+                <span style={{
+                  fontFamily: T.fontMono, fontSize: 10, letterSpacing: "0.15em",
+                  fontWeight: 700, textTransform: "uppercase",
+                }}>View all</span>
+              )}
+              <ChevronRight size={isMobile ? 18 : 16} />
             </div>
           </button>
         );
-      })}
+      })()}
+
+      {/* Phase-aware tile count indicator — makes the toggle visible */}
+      <div style={{
+        display: "flex", alignItems: "baseline", justifyContent: "space-between",
+        marginBottom: 14, gap: 10, flexWrap: "wrap",
+      }}>
+        <div style={{
+          fontFamily: T.fontMono, fontSize: 10, letterSpacing: "0.22em",
+          color: T.inkDarkMuted, fontWeight: 700, textTransform: "uppercase",
+        }}>
+          {phase === "p1" ? "Phase 1 · 4 tiles" : "Phase 2 · 7 tiles"}
+        </div>
+        <div style={{
+          fontFamily: T.fontBody, fontSize: 12, color: T.inkDarkMuted,
+        }}>
+          {phase === "p1" ? "5-week MVP scope" : "Weeks 9–14 expansion"}
+        </div>
+      </div>
+
+      {/* Tiles — grid differs by phase: P1 uses wider tiles (4 at 260), P2 uses tighter (7 at 200) */}
+      <div style={{
+        display: "grid",
+        gap: isMobile ? 12 : 16,
+        gridTemplateColumns: isMobile
+          ? "1fr"
+          : phase === "p1"
+            ? "repeat(auto-fit, minmax(240px, 1fr))"
+            : "repeat(auto-fit, minmax(200px, 1fr))",
+      }}>
+        {tiles.map((t) => <Tile key={t.id} tile={t} onClick={onNavigate} isMobile={isMobile} />)}
+      </div>
+
+      {/* Scope explainer */}
+      <div style={{
+        marginTop: isMobile ? 28 : 40,
+        padding: isMobile ? "14px 16px" : "18px 22px",
+        background: "rgba(210,105,30,0.06)",
+        border: `1px solid rgba(210,105,30,0.25)`,
+        borderLeft: `3px solid ${T.orange}`, borderRadius: 4,
+      }}>
+        <div style={{
+          fontFamily: T.fontMono, fontSize: 9, letterSpacing: "0.2em",
+          color: T.orange, fontWeight: 700, textTransform: "uppercase", marginBottom: 6,
+        }}>{phase === "p1" ? "Currently showing · Phase 1" : "Currently showing · Phase 2"}</div>
+        <div style={{
+          fontFamily: T.fontBody, fontSize: 13, color: T.inkDark, lineHeight: 1.55,
+        }}>
+          {phase === "p1"
+            ? "Four tiles — the scope Jim explicitly asked for on the discovery call. This is what ships in the 5-week MVP: Home, Open a case, My Tickets, Documents. Toggle to Phase 2 to see the expanded scope."
+            : "Seven tiles — the Phase 2 expansion planned for weeks 9–14. Adds Dashboards, Knowledge Base, and Services alongside the core four. Quotes, invoices, and scheduled meetings remain explicitly out of scope."}
+        </div>
+      </div>
     </div>
   );
+};
 
-  const renderDecision = () => {
-    const item = items.find((i) => i.id === activeItemId);
-    if (!item) return renderStatus();
-    const needsDecision = item.requiresClient;
-    const accent = needsDecision ? T.statusAttention : T.statusWorking;
+/* ============================================================
+ * OPEN A CASE
+ * ============================================================ */
+const OpenCaseView = ({ onBack, onSubmit }) => {
+  const isMobile = useIsMobile();
+  const [urgency, setUrgency] = useState("standard");
+  const [category, setCategory] = useState("");
+  const [subject, setSubject] = useState("");
+  const [description, setDescription] = useState("");
+  const [submitted, setSubmitted] = useState(false);
 
+  const handleSubmit = () => {
+    if (!subject.trim() || !description.trim()) return;
+    setSubmitted(true);
+    setTimeout(() => {
+      onSubmit({ urgency, category, subject, description });
+    }, 1100);
+  };
+
+  if (submitted) {
     return (
-      <div style={{ animation: "sentry-fade-in 0.4s ease-out" }}>
-        <button onClick={() => goto("active")} style={S.btnBack}>
-          <Icon name="chevronL" size={14} /> Back
-        </button>
-        <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, letterSpacing: "0.22em", color: accent, textTransform: "uppercase", marginBottom: 12, fontWeight: 700 }}>
-          {needsDecision ? "Decision needed" : "For your awareness"}
-        </div>
-        <div style={S.decisionTitle}>{item.title}</div>
-        <div style={S.decisionHeadline}>{item.headline}</div>
-
-        {/* What's happening */}
-        <div style={S.contextCard}>
-          <div style={{ ...S.eyebrow, marginBottom: 10 }}>What's happening</div>
-          <div style={S.cardTitle}>{item.context}</div>
-        </div>
-
-        {/* Response Timeline */}
+      <div style={{
+        maxWidth: 560, margin: isMobile ? "40px auto" : "80px auto",
+        padding: isMobile ? 24 : 40, textAlign: "center",
+        background: T.bgLightCard, border: `1px solid ${T.dividerLight}`, borderRadius: 8,
+      }}>
         <div style={{
-          background: T.timelineGrad,
-          border: `1px solid ${T.timelineBorder}`,
-          borderLeft: `3px solid ${T.statusClear}`,
-          borderRadius: 16,
-          padding: 18,
-          marginBottom: 16,
+          width: 54, height: 54, borderRadius: "50%", margin: "0 auto 20px",
+          background: `${T.slaOk}22`, color: T.slaOk,
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}><Check size={26} /></div>
+        <div style={{
+          fontFamily: T.fontDisplay, fontSize: 28, color: T.inkDark,
+          fontWeight: 400, marginBottom: 10,
+        }}>Your case is open.</div>
+        <div style={{
+          fontFamily: T.fontBody, fontSize: 15, color: T.inkDarkDim, lineHeight: 1.5,
         }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <div style={{ width: 28, height: 28, borderRadius: 8, background: T.statusClearDim, display: "flex", alignItems: "center", justifyContent: "center", color: T.statusClear }}>
-                <Icon name="activity" size={14} />
+          An analyst will review shortly. You'll see updates in My Tickets.
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{
+      maxWidth: 720, margin: "0 auto",
+      padding: isMobile ? "24px 18px" : "40px 30px",
+    }}>
+      <button onClick={onBack} style={{
+        display: "flex", alignItems: "center", gap: 6,
+        background: "transparent", border: "none", cursor: "pointer",
+        fontFamily: T.fontMono, fontSize: 10, letterSpacing: "0.15em",
+        color: T.inkDarkDim, fontWeight: 700, textTransform: "uppercase", marginBottom: 20,
+      }}><ArrowLeft size={13} /> BACK</button>
+
+      <div style={{
+        fontFamily: T.fontDisplay, fontSize: isMobile ? 28 : 38, color: T.inkDark,
+        fontWeight: 400, marginBottom: 10,
+      }}>Open a new case</div>
+      <div style={{
+        fontFamily: T.fontDisplay, fontSize: isMobile ? 15 : 18, color: T.inkDarkDim,
+        fontStyle: "italic", marginBottom: 36, lineHeight: 1.45,
+      }}>
+        Tell us what you're seeing. An analyst will pick it up — usually within minutes.
+      </div>
+
+      {/* Urgency */}
+      <div style={{ marginBottom: 24 }}>
+        <label style={{
+          display: "block", fontFamily: T.fontMono, fontSize: 10, letterSpacing: "0.2em",
+          color: T.inkDarkDim, fontWeight: 700, textTransform: "uppercase", marginBottom: 10,
+        }}>How urgent?</label>
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr",
+          gap: 10,
+        }}>
+          {[
+            { id: "standard", label: "Standard", sub: "Informational or FYI", color: T.steel },
+            { id: "important", label: "Important", sub: "Needs a response today", color: T.sevHigh },
+            { id: "urgent", label: "Urgent", sub: "Active threat or incident", color: T.orange },
+          ].map((u) => (
+            <button key={u.id} onClick={() => setUrgency(u.id)} style={{
+              padding: 16, borderRadius: 6, cursor: "pointer",
+              background: urgency === u.id ? `${u.color}18` : T.bgLightCard,
+              border: `2px solid ${urgency === u.id ? u.color : T.dividerLight}`,
+              textAlign: "left",
+            }}>
+              <div style={{
+                fontFamily: T.fontBody, fontSize: 14, color: T.inkDark, fontWeight: 600, marginBottom: 3,
+              }}>{u.label}</div>
+              <div style={{ fontFamily: T.fontBody, fontSize: 11, color: T.inkDarkDim }}>{u.sub}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Category */}
+      <div style={{ marginBottom: 24 }}>
+        <label style={{
+          display: "block", fontFamily: T.fontMono, fontSize: 10, letterSpacing: "0.2em",
+          color: T.inkDarkDim, fontWeight: 700, textTransform: "uppercase", marginBottom: 10,
+        }}>What's it about?</label>
+        <select value={category} onChange={(e) => setCategory(e.target.value)} style={{
+          width: "100%", padding: 14, background: T.bgLightCard,
+          border: `1px solid ${T.dividerLight}`, borderRadius: 4,
+          fontFamily: T.fontBody, fontSize: 14, color: T.inkDark,
+        }}>
+          <option value="">Select a category…</option>
+          <option value="incident">Security incident or alert</option>
+          <option value="request">Change request (scope, users, etc.)</option>
+          <option value="question">Question about a report or finding</option>
+          <option value="escalation">Escalation or complaint</option>
+          <option value="other">Something else</option>
+        </select>
+      </div>
+
+      {/* Subject */}
+      <div style={{ marginBottom: 24 }}>
+        <label style={{
+          display: "block", fontFamily: T.fontMono, fontSize: 10, letterSpacing: "0.2em",
+          color: T.inkDarkDim, fontWeight: 700, textTransform: "uppercase", marginBottom: 10,
+        }}>Subject</label>
+        <input
+          value={subject} onChange={(e) => setSubject(e.target.value)}
+          placeholder="One-line summary"
+          style={{
+            width: "100%", padding: 14, background: T.bgLightCard,
+            border: `1px solid ${T.dividerLight}`, borderRadius: 4,
+            fontFamily: T.fontBody, fontSize: 14, color: T.inkDark,
+            boxSizing: "border-box",
+          }}
+        />
+      </div>
+
+      {/* Description */}
+      <div style={{ marginBottom: 32 }}>
+        <label style={{
+          display: "block", fontFamily: T.fontMono, fontSize: 10, letterSpacing: "0.2em",
+          color: T.inkDarkDim, fontWeight: 700, textTransform: "uppercase", marginBottom: 10,
+        }}>What's happening?</label>
+        <textarea
+          value={description} onChange={(e) => setDescription(e.target.value)}
+          placeholder="Be as specific as you can — what you saw, when, and anything that feels relevant."
+          style={{
+            width: "100%", minHeight: 160, resize: "vertical",
+            padding: 14, background: T.bgLightCard,
+            border: `1px solid ${T.dividerLight}`, borderRadius: 4,
+            fontFamily: T.fontBody, fontSize: 14, color: T.inkDark, lineHeight: 1.55,
+            boxSizing: "border-box",
+          }}
+        />
+      </div>
+
+      <button
+        onClick={handleSubmit}
+        disabled={!subject.trim() || !description.trim()}
+        style={{
+          padding: "14px 22px", borderRadius: 6,
+          background: T.bg, color: "#fff", border: "none",
+          fontFamily: T.fontBody, fontSize: 15, fontWeight: 500,
+          cursor: (!subject.trim() || !description.trim()) ? "not-allowed" : "pointer",
+          opacity: (!subject.trim() || !description.trim()) ? 0.4 : 1,
+          display: "flex", alignItems: "center", gap: 8,
+          width: isMobile ? "100%" : "auto",
+          justifyContent: isMobile ? "center" : "flex-start",
+        }}
+      >Open this case <ArrowRight size={16} /></button>
+    </div>
+  );
+};
+
+/* ============================================================
+ * MY TICKETS
+ * ============================================================ */
+
+const TicketCard = ({ ticket, onOpen, onArchive }) => {
+  const sev = severityLanguage(ticket.severity, ticket.status);
+  const [swipeX, setSwipeX] = useState(0);
+  const [swiping, setSwiping] = useState(false);
+  const touchStartX = useRef(null);
+  const touchStartY = useRef(null);
+  const touchMoved = useRef(false);
+  const COMMIT_PX = 140;
+  const MAX_SWIPE = 220;
+
+  const onTouchStart = (e) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+    touchMoved.current = false;
+    setSwiping(true);
+  };
+  const onTouchMove = (e) => {
+    if (touchStartX.current == null) return;
+    const dx = e.touches[0].clientX - touchStartX.current;
+    const dy = e.touches[0].clientY - touchStartY.current;
+    // Cancel if vertical scroll wins
+    if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 10) {
+      touchStartX.current = null;
+      setSwipeX(0);
+      setSwiping(false);
+      return;
+    }
+    if (Math.abs(dx) > 6) touchMoved.current = true;
+    // Only allow swipe-left (archive gesture) — no swipe-right for customers
+    const clamped = Math.max(-MAX_SWIPE, Math.min(0, dx));
+    setSwipeX(clamped);
+  };
+  const onTouchEnd = () => {
+    if (touchStartX.current == null) { setSwiping(false); return; }
+    if (swipeX <= -COMMIT_PX && onArchive) {
+      onArchive(ticket.id);
+    }
+    setSwipeX(0);
+    setSwiping(false);
+    touchStartX.current = null;
+  };
+  const handleClick = (e) => {
+    if (touchMoved.current) {
+      e.preventDefault(); e.stopPropagation();
+      touchMoved.current = false;
+      return;
+    }
+    onOpen(ticket.id);
+  };
+
+  const showArchiveZone = swipeX < -20;
+  const archiveOpacity = Math.min(1, -swipeX / COMMIT_PX);
+
+  return (
+    <div style={{ position: "relative", overflow: "hidden", borderRadius: 6 }}>
+      {showArchiveZone && (
+        <div style={{
+          position: "absolute", inset: 0,
+          display: "flex", alignItems: "center", justifyContent: "flex-end",
+          paddingRight: 22, pointerEvents: "none",
+          background: `rgba(107,147,184,${0.12 + archiveOpacity * 0.18})`,
+          borderRadius: 6,
+        }}>
+          <div style={{
+            display: "flex", alignItems: "center", gap: 10,
+            opacity: archiveOpacity,
+            transform: `scale(${0.85 + archiveOpacity * 0.15})`,
+          }}>
+            <span style={{
+              fontFamily: T.fontMono, fontSize: 10, fontWeight: 700,
+              letterSpacing: "0.2em", color: T.steel, textTransform: "uppercase",
+            }}>
+              {swipeX <= -COMMIT_PX ? "Release to archive" : "Archive"}
+            </span>
+            <Archive size={18} style={{ color: T.steel }} />
+          </div>
+        </div>
+      )}
+      <button
+        onClick={handleClick}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        onTouchCancel={onTouchEnd}
+        style={{
+          background: T.bgLightCard, border: `1px solid ${T.dividerLight}`, borderRadius: 6,
+          padding: 20, textAlign: "left", cursor: "pointer", width: "100%",
+          transform: `translateX(${swipeX}px)`,
+          transition: swiping ? "none" : "all 220ms cubic-bezier(0.2, 0.9, 0.3, 1)",
+          position: "relative", zIndex: 1,
+        }}
+        onMouseEnter={(e) => e.currentTarget.style.borderColor = T.steel}
+        onMouseLeave={(e) => e.currentTarget.style.borderColor = T.dividerLight}
+      >
+      <div style={{
+        display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6,
+      }}>
+        <div style={{
+          fontFamily: T.fontMono, fontSize: 10, letterSpacing: "0.14em",
+          color: T.inkDarkMuted, fontWeight: 600,
+        }}>{ticket.id}</div>
+        <div style={{
+          fontFamily: T.fontMono, fontSize: 9, letterSpacing: "0.12em",
+          color: T.inkDarkMuted, textTransform: "uppercase",
+        }}>Opened {fmtAgo(ticket.createdAt)}</div>
+      </div>
+      <div style={{
+        fontFamily: T.fontDisplay, fontSize: 19, color: T.inkDark,
+        fontWeight: 500, lineHeight: 1.3, marginBottom: 10,
+      }}>{ticket.subject}</div>
+      <div style={{
+        fontFamily: T.fontBody, fontSize: 13, color: T.inkDarkDim,
+        lineHeight: 1.55, marginBottom: 14,
+      }}>{ticket.customerFacing}</div>
+      <div style={{
+        display: "flex", alignItems: "center", gap: 10,
+      }}>
+        <span style={{
+          display: "inline-flex", alignItems: "center", gap: 8,
+          padding: "4px 10px", borderRadius: 999,
+          background: `${sev.color}18`, border: `1px solid ${sev.color}55`,
+        }}>
+          <span style={{ width: 6, height: 6, borderRadius: "50%", background: sev.color }} />
+          <span style={{
+            fontFamily: T.fontBody, fontSize: 12, color: sev.color, fontWeight: 500,
+          }}>{sev.label}</span>
+        </span>
+        <div style={{ flex: 1 }} />
+        <span style={{
+          fontFamily: T.fontMono, fontSize: 10, color: T.inkDarkMuted, letterSpacing: "0.1em",
+        }}>Last update {fmtAgo(ticket.lastUpdate)}</span>
+        <ChevronRight size={14} style={{ color: T.inkDarkDim }} />
+      </div>
+      </button>
+    </div>
+  );
+};
+
+const TicketsListView = ({ tickets, onBack, onOpenTicket, showToast }) => {
+  const isMobile = useIsMobile();
+  const [filter, setFilter] = useState("all");
+  const [archivedIds, setArchivedIds] = useState(new Set());
+  const handleArchive = (ticketId) => {
+    setArchivedIds((prev) => new Set([...prev, ticketId]));
+    if (showToast) showToast(`${ticketId} archived from view`);
+  };
+  const visible = tickets.filter((t) => !archivedIds.has(t.id));
+  const filtered = filter === "all"
+    ? visible
+    : filter === "open"
+    ? visible.filter((t) => t.status !== "resolved")
+    : visible.filter((t) => t.status === "resolved");
+
+  return (
+    <div style={{
+      maxWidth: 880, margin: "0 auto",
+      padding: isMobile ? "24px 18px" : "40px 30px",
+    }}>
+      <button onClick={onBack} style={{
+        display: "flex", alignItems: "center", gap: 6,
+        background: "transparent", border: "none", cursor: "pointer",
+        fontFamily: T.fontMono, fontSize: 10, letterSpacing: "0.15em",
+        color: T.inkDarkDim, fontWeight: 700, textTransform: "uppercase", marginBottom: 20,
+      }}><ArrowLeft size={13} /> BACK</button>
+
+      <div style={{
+        fontFamily: T.fontDisplay, fontSize: isMobile ? 28 : 38, color: T.inkDark,
+        fontWeight: 400, marginBottom: 6,
+      }}>My tickets</div>
+      <div style={{
+        fontFamily: T.fontDisplay, fontSize: isMobile ? 14 : 17, color: T.inkDarkDim,
+        fontStyle: "italic", marginBottom: 24,
+      }}>Every case we've opened on your behalf. Open cases first.</div>
+
+      {/* Filter */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 20, flexWrap: "wrap" }}>
+        {[
+          { id: "all", label: "All" },
+          { id: "open", label: "Open" },
+          { id: "resolved", label: "Resolved" },
+        ].map((f) => (
+          <button key={f.id} onClick={() => setFilter(f.id)} style={{
+            padding: "6px 14px", borderRadius: 4, cursor: "pointer",
+            background: filter === f.id ? T.inkDark : "transparent",
+            color: filter === f.id ? "#fff" : T.inkDarkDim,
+            border: `1px solid ${filter === f.id ? T.inkDark : T.dividerLight}`,
+            fontFamily: T.fontBody, fontSize: 13, fontWeight: 500,
+          }}>{f.label}</button>
+        ))}
+      </div>
+
+      {/* List */}
+      <div style={{ display: "grid", gap: 12 }}>
+        {filtered.sort((a, b) => b.createdAt - a.createdAt).map((t) => (
+          <TicketCard key={t.id} ticket={t} onOpen={onOpenTicket} onArchive={handleArchive} />
+        ))}
+      </div>
+    </div>
+  );
+};
+
+/* ============================================================
+ * TICKET DETAIL (customer view)
+ * ============================================================ */
+
+const TicketDetailView = ({ ticket, onBack }) => {
+  const isMobile = useIsMobile();
+  const sev = severityLanguage(ticket.severity, ticket.status);
+  const [reply, setReply] = useState("");
+
+  return (
+    <div style={{
+      maxWidth: 760, margin: "0 auto",
+      padding: isMobile ? "24px 18px" : "40px 30px",
+    }}>
+      <button onClick={onBack} style={{
+        display: "flex", alignItems: "center", gap: 6,
+        background: "transparent", border: "none", cursor: "pointer",
+        fontFamily: T.fontMono, fontSize: 10, letterSpacing: "0.15em",
+        color: T.inkDarkDim, fontWeight: 700, textTransform: "uppercase", marginBottom: 20,
+      }}><ArrowLeft size={13} /> BACK TO MY TICKETS</button>
+
+      <div style={{
+        fontFamily: T.fontMono, fontSize: 11, letterSpacing: "0.14em",
+        color: T.inkDarkMuted, fontWeight: 600, marginBottom: 10,
+      }}>{ticket.id}</div>
+      <div style={{
+        fontFamily: T.fontDisplay, fontSize: isMobile ? 24 : 32, color: T.inkDark,
+        fontWeight: 400, lineHeight: 1.2, marginBottom: 16,
+      }}>{ticket.subject}</div>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 28 }}>
+        <span style={{
+          display: "inline-flex", alignItems: "center", gap: 8,
+          padding: "5px 12px", borderRadius: 999,
+          background: `${sev.color}18`, border: `1px solid ${sev.color}55`,
+        }}>
+          <span style={{ width: 7, height: 7, borderRadius: "50%", background: sev.color }} />
+          <span style={{ fontFamily: T.fontBody, fontSize: 13, color: sev.color, fontWeight: 500 }}>
+            {sev.label}
+          </span>
+        </span>
+        <span style={{ fontFamily: T.fontMono, fontSize: 10, color: T.inkDarkMuted, letterSpacing: "0.12em" }}>
+          Opened {fmtAgo(ticket.createdAt)}
+        </span>
+      </div>
+
+      {/* Customer-facing summary */}
+      <div style={{
+        padding: 22, background: T.bgLightCard,
+        border: `1px solid ${T.dividerLight}`, borderRadius: 6, marginBottom: 28,
+      }}>
+        <div style={{
+          fontFamily: T.fontMono, fontSize: 10, letterSpacing: "0.2em",
+          color: T.orange, fontWeight: 700, textTransform: "uppercase", marginBottom: 10,
+        }}>Summary</div>
+        <div style={{
+          fontFamily: T.fontBody, fontSize: 15, color: T.inkDark, lineHeight: 1.6,
+        }}>{ticket.customerFacing}</div>
+      </div>
+
+      {/* Thread */}
+      {ticket.thread.length > 0 && (
+        <>
+          <div style={{
+            fontFamily: T.fontMono, fontSize: 10, letterSpacing: "0.2em",
+            color: T.orange, fontWeight: 700, textTransform: "uppercase", marginBottom: 14,
+          }}>Conversation</div>
+          <div style={{ display: "grid", gap: 14, marginBottom: 28 }}>
+            {ticket.thread.map((msg, i) => (
+              <div key={i} style={{
+                padding: 18, borderRadius: 6,
+                background: msg.from === "VDA" ? T.bgLightCard : T.orangeTint,
+                border: `1px solid ${msg.from === "VDA" ? T.dividerLight : "rgba(210,105,30,0.25)"}`,
+                borderLeft: msg.from === "VDA" ? `3px solid ${T.steel}` : `3px solid ${T.orange}`,
+              }}>
+                <div style={{
+                  display: "flex", justifyContent: "space-between", alignItems: "baseline",
+                  marginBottom: 8,
+                }}>
+                  <div style={{
+                    fontFamily: T.fontMono, fontSize: 10, letterSpacing: "0.14em",
+                    color: msg.from === "VDA" ? T.steel : T.orange, fontWeight: 700,
+                    textTransform: "uppercase",
+                  }}>{msg.from === "VDA" ? "VDA Analyst" : "You"}</div>
+                  <div style={{
+                    fontFamily: T.fontMono, fontSize: 9, color: T.inkDarkMuted,
+                    letterSpacing: "0.1em",
+                  }}>{fmtAgo(msg.at)}</div>
+                </div>
+                <div style={{
+                  fontFamily: T.fontBody, fontSize: 14, color: T.inkDark, lineHeight: 1.55,
+                }}>{msg.body}</div>
               </div>
-              <div style={{ ...S.eyebrow, color: T.statusClear, fontWeight: 700 }}>What we've done</div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Reply form (only for open tickets) */}
+      {ticket.status !== "resolved" && (
+        <div style={{
+          padding: 22, background: T.bgLightCard,
+          border: `1px solid ${T.dividerLight}`, borderRadius: 6,
+        }}>
+          <div style={{
+            fontFamily: T.fontMono, fontSize: 10, letterSpacing: "0.2em",
+            color: T.inkDarkDim, fontWeight: 700, textTransform: "uppercase", marginBottom: 10,
+          }}>Reply</div>
+          <textarea
+            value={reply} onChange={(e) => setReply(e.target.value)}
+            placeholder="Add more context, answer our question, or let us know anything we should be aware of."
+            style={{
+              width: "100%", minHeight: 120, resize: "vertical", padding: 14,
+              background: T.bgLight, border: `1px solid ${T.dividerLight}`, borderRadius: 4,
+              fontFamily: T.fontBody, fontSize: 14, color: T.inkDark, lineHeight: 1.55, marginBottom: 12,
+            }}
+          />
+          <button
+            disabled={reply.trim().length < 3}
+            onClick={() => { setReply(""); }}
+            style={{
+              padding: "10px 18px", borderRadius: 4,
+              background: reply.trim().length < 3 ? T.dividerLight : T.inkDark,
+              color: reply.trim().length < 3 ? T.inkDarkMuted : "#fff",
+              border: "none",
+              fontFamily: T.fontBody, fontSize: 14, fontWeight: 500,
+              cursor: reply.trim().length < 3 ? "not-allowed" : "pointer",
+              display: "inline-flex", alignItems: "center", gap: 6,
+            }}
+          ><Send size={13} /> Send reply</button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/* ============================================================
+ * CONTRACT
+ * ============================================================ */
+
+const ContractView = ({ onBack }) => {
+  const isMobile = useIsMobile();
+  const c = THIS_CUSTOMER.contract;
+  return (
+    <div style={{
+      maxWidth: 760, margin: "0 auto",
+      padding: isMobile ? "24px 18px" : "40px 30px",
+    }}>
+      <button onClick={onBack} style={{
+        display: "flex", alignItems: "center", gap: 6,
+        background: "transparent", border: "none", cursor: "pointer",
+        fontFamily: T.fontMono, fontSize: 10, letterSpacing: "0.15em",
+        color: T.inkDarkDim, fontWeight: 700, textTransform: "uppercase", marginBottom: 20,
+      }}><ArrowLeft size={13} /> BACK</button>
+
+      <div style={{
+        fontFamily: T.fontDisplay, fontSize: isMobile ? 28 : 38, color: T.inkDark, marginBottom: 6,
+      }}>Your contract</div>
+      <div style={{
+        fontFamily: T.fontDisplay, fontSize: isMobile ? 14 : 17, color: T.inkDarkDim,
+        fontStyle: "italic", marginBottom: 32,
+      }}>The services VDA is delivering, at a glance.</div>
+
+      <div style={{
+        padding: isMobile ? 18 : 24, background: T.bgLightCard,
+        border: `1px solid ${T.dividerLight}`, borderRadius: 6, marginBottom: 20,
+      }}>
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr",
+          gap: isMobile ? 14 : 20, marginBottom: isMobile ? 0 : 20,
+        }}>
+          {[
+            { label: "Tier", value: c.tier },
+            { label: "Renewal", value: c.renewalDate },
+            { label: "Monthly", value: c.monthlySpend },
+          ].map((f) => (
+            <div key={f.label}>
+              <div style={{
+                fontFamily: T.fontMono, fontSize: 9, letterSpacing: "0.2em",
+                color: T.inkDarkMuted, fontWeight: 700, textTransform: "uppercase", marginBottom: 4,
+              }}>{f.label}</div>
+              <div style={{
+                fontFamily: T.fontDisplay, fontSize: 20, color: T.inkDark, fontWeight: 500,
+              }}>{f.value}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={{
+        fontFamily: T.fontMono, fontSize: 10, letterSpacing: "0.2em",
+        color: T.orange, fontWeight: 700, textTransform: "uppercase", marginBottom: 12,
+      }}>Services in scope</div>
+      <div style={{ display: "grid", gap: 10 }}>
+        {c.services.map((s) => (
+          <div key={s.name} style={{
+            padding: 18, background: T.bgLightCard,
+            border: `1px solid ${T.dividerLight}`, borderRadius: 6,
+            display: "flex", alignItems: "center", gap: 16,
+          }}>
+            <div style={{
+              width: 8, height: 8, borderRadius: "50%",
+              background: s.status === "active" ? T.slaOk : T.sevHigh,
+            }} />
+            <div style={{ flex: 1 }}>
+              <div style={{
+                fontFamily: T.fontBody, fontSize: 14, color: T.inkDark, fontWeight: 500,
+              }}>{s.name}</div>
+              <div style={{ fontFamily: T.fontMono, fontSize: 11, color: T.inkDarkMuted, letterSpacing: "0.1em", marginTop: 2 }}>
+                {s.count}
+              </div>
             </div>
             <div style={{
+              fontFamily: T.fontMono, fontSize: 10, letterSpacing: "0.14em",
+              color: s.status === "active" ? T.slaOk : T.sevHigh,
+              fontWeight: 700, textTransform: "uppercase",
+            }}>{s.status}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+/* ============================================================
+ * DOCUMENTS
+ * ============================================================ */
+const DocumentsView = ({ onBack }) => {
+  const isMobile = useIsMobile();
+  return (
+  <div style={{
+    maxWidth: 760, margin: "0 auto",
+    padding: isMobile ? "24px 18px" : "40px 30px",
+  }}>
+    <button onClick={onBack} style={{
+      display: "flex", alignItems: "center", gap: 6,
+      background: "transparent", border: "none", cursor: "pointer",
+      fontFamily: T.fontMono, fontSize: 10, letterSpacing: "0.15em",
+      color: T.inkDarkDim, fontWeight: 700, textTransform: "uppercase", marginBottom: 20,
+    }}><ArrowLeft size={13} /> BACK</button>
+
+    <div style={{ fontFamily: T.fontDisplay, fontSize: isMobile ? 28 : 38, color: T.inkDark, marginBottom: 6 }}>
+      Documents
+    </div>
+    <div style={{
+      fontFamily: T.fontDisplay, fontSize: isMobile ? 14 : 17, color: T.inkDarkDim, fontStyle: "italic", marginBottom: 32,
+    }}>Contracts, runbooks, reports, and records shared with your team.</div>
+
+    <div style={{ display: "grid", gap: 10 }}>
+      {DOCUMENTS.map((d) => (
+        <div key={d.id} style={{
+          padding: 16, background: T.bgLightCard,
+          border: `1px solid ${T.dividerLight}`, borderRadius: 6,
+          display: "flex", alignItems: "center", gap: 14,
+        }}>
+          <div style={{
+            width: 36, height: 36, borderRadius: 4, background: "#EEF0F3", color: T.steel,
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}><FileText size={18} /></div>
+          <div style={{ flex: 1 }}>
+            <div style={{
+              fontFamily: T.fontBody, fontSize: 14, color: T.inkDark, fontWeight: 500,
+            }}>{d.name}</div>
+            <div style={{
+              fontFamily: T.fontMono, fontSize: 10, color: T.inkDarkMuted, letterSpacing: "0.1em", marginTop: 2,
+            }}>{d.kind} · Updated {d.updated}</div>
+          </div>
+          <ChevronRight size={14} style={{ color: T.inkDarkDim }} />
+        </div>
+      ))}
+    </div>
+  </div>
+  );
+};
+
+/* ============================================================
+ * DASHBOARDS (Phase 2)
+ * ============================================================ */
+
+const DashboardsView = ({ tickets, onBack }) => {
+  const isMobile = useIsMobile();
+  const open = tickets.filter((t) => t.status !== "resolved").length;
+  const resolved30d = tickets.filter((t) => t.status === "resolved").length;
+
+  return (
+    <div style={{
+      maxWidth: 880, margin: "0 auto",
+      padding: isMobile ? "24px 18px" : "40px 30px",
+    }}>
+      <button onClick={onBack} style={{
+        display: "flex", alignItems: "center", gap: 6,
+        background: "transparent", border: "none", cursor: "pointer",
+        fontFamily: T.fontMono, fontSize: 10, letterSpacing: "0.15em",
+        color: T.inkDarkDim, fontWeight: 700, textTransform: "uppercase", marginBottom: 20,
+      }}><ArrowLeft size={13} /> BACK</button>
+
+      <div style={{
+        fontFamily: T.fontDisplay, fontSize: isMobile ? 28 : 38, color: T.inkDark, marginBottom: 6,
+      }}>Your security posture</div>
+      <div style={{
+        fontFamily: T.fontDisplay, fontSize: isMobile ? 14 : 17, color: T.inkDarkDim,
+        fontStyle: "italic", marginBottom: 32,
+      }}>What VDA's done for you — this week, this month, this year.</div>
+
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr",
+        gap: 16, marginBottom: 28,
+      }}>
+        {[
+          { label: "Open cases", value: open, caption: "active right now" },
+          { label: "Resolved · last 30 days", value: resolved30d, caption: "cases closed" },
+          { label: "Email phishing blocked", value: "124", caption: "this month" },
+        ].map((m) => (
+          <div key={m.label} style={{
+            padding: 22, background: T.bgLightCard,
+            border: `1px solid ${T.dividerLight}`, borderRadius: 6,
+          }}>
+            <div style={{
+              fontFamily: T.fontMono, fontSize: 9, letterSpacing: "0.2em",
+              color: T.inkDarkMuted, fontWeight: 700, textTransform: "uppercase", marginBottom: 8,
+            }}>{m.label}</div>
+            <div style={{
+              fontFamily: T.fontDisplay, fontSize: 44, color: T.orange, fontWeight: 400, lineHeight: 1,
+            }}>{m.value}</div>
+            <div style={{
+              fontFamily: T.fontBody, fontSize: 12, color: T.inkDarkDim, marginTop: 6,
+            }}>{m.caption}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{
+        padding: 22, background: T.bgLightCard,
+        border: `1px solid ${T.dividerLight}`, borderRadius: 6,
+      }}>
+        <div style={{
+          fontFamily: T.fontMono, fontSize: 10, letterSpacing: "0.2em",
+          color: T.orange, fontWeight: 700, textTransform: "uppercase", marginBottom: 10,
+        }}>This month's take</div>
+        <div style={{
+          fontFamily: T.fontDisplay, fontSize: isMobile ? 16 : 20, color: T.inkDark,
+          lineHeight: 1.4, fontStyle: "italic",
+        }}>
+          A steady month. We surfaced {open + resolved30d} events across your environment — most routine,
+          one worth your attention (the CFO login, still in progress). No data reached your team that shouldn't have.
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* ============================================================
+ * KNOWLEDGE BASE (Phase 2)
+ * ============================================================ */
+const KBView = ({ onBack }) => {
+  const isMobile = useIsMobile();
+  return (
+  <div style={{
+    maxWidth: 760, margin: "0 auto",
+    padding: isMobile ? "24px 18px" : "40px 30px",
+  }}>
+    <button onClick={onBack} style={{
+      display: "flex", alignItems: "center", gap: 6,
+      background: "transparent", border: "none", cursor: "pointer",
+      fontFamily: T.fontMono, fontSize: 10, letterSpacing: "0.15em",
+      color: T.inkDarkDim, fontWeight: 700, textTransform: "uppercase", marginBottom: 20,
+    }}><ArrowLeft size={13} /> BACK</button>
+
+    <div style={{ fontFamily: T.fontDisplay, fontSize: isMobile ? 28 : 38, color: T.inkDark, marginBottom: 6 }}>
+      Knowledge base
+    </div>
+    <div style={{
+      fontFamily: T.fontDisplay, fontSize: isMobile ? 14 : 17, color: T.inkDarkDim, fontStyle: "italic", marginBottom: 32,
+    }}>Common questions, answered once.</div>
+
+    <div style={{ display: "grid", gap: 10 }}>
+      {KB_ARTICLES.map((a) => (
+        <div key={a.id} style={{
+          padding: 18, background: T.bgLightCard,
+          border: `1px solid ${T.dividerLight}`, borderRadius: 6,
+          display: "flex", alignItems: "center", gap: 14, cursor: "pointer",
+        }}>
+          <HelpCircle size={18} style={{ color: T.steel, flexShrink: 0 }} />
+          <div style={{ flex: 1 }}>
+            <div style={{
+              fontFamily: T.fontBody, fontSize: 14, color: T.inkDark, fontWeight: 500,
+            }}>{a.title}</div>
+            <div style={{
+              fontFamily: T.fontMono, fontSize: 10, color: T.inkDarkMuted, letterSpacing: "0.12em", marginTop: 2,
+            }}>{a.category.toUpperCase()}</div>
+          </div>
+          <ChevronRight size={14} style={{ color: T.inkDarkDim }} />
+        </div>
+      ))}
+    </div>
+  </div>
+  );
+};
+
+/* ============================================================
+ * SERVICES (Phase 2)
+ * ============================================================ */
+const ServicesView = ({ onBack }) => {
+  const isMobile = useIsMobile();
+  return (
+  <div style={{
+    maxWidth: 760, margin: "0 auto",
+    padding: isMobile ? "24px 18px" : "40px 30px",
+  }}>
+    <button onClick={onBack} style={{
+      display: "flex", alignItems: "center", gap: 6,
+      background: "transparent", border: "none", cursor: "pointer",
+      fontFamily: T.fontMono, fontSize: 10, letterSpacing: "0.15em",
+      color: T.inkDarkDim, fontWeight: 700, textTransform: "uppercase", marginBottom: 20,
+    }}><ArrowLeft size={13} /> BACK</button>
+
+    <div style={{ fontFamily: T.fontDisplay, fontSize: isMobile ? 28 : 38, color: T.inkDark, marginBottom: 6 }}>
+      Services
+    </div>
+    <div style={{
+      fontFamily: T.fontDisplay, fontSize: isMobile ? 14 : 17, color: T.inkDarkDim, fontStyle: "italic", marginBottom: 32,
+    }}>What's covered — and what you can add.</div>
+
+    <div style={{ display: "grid", gap: 10 }}>
+      {THIS_CUSTOMER.contract.services.map((s) => (
+        <div key={s.name} style={{
+          padding: 18, background: T.bgLightCard,
+          border: `1px solid ${T.dividerLight}`, borderRadius: 6,
+          display: "flex", alignItems: "center", gap: 14,
+        }}>
+          <div style={{
+            width: 38, height: 38, borderRadius: 8,
+            background: "#EEF0F3", color: T.steel,
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}><Shield size={18} /></div>
+          <div style={{ flex: 1 }}>
+            <div style={{
+              fontFamily: T.fontBody, fontSize: 14, color: T.inkDark, fontWeight: 500,
+            }}>{s.name}</div>
+            <div style={{
+              fontFamily: T.fontMono, fontSize: 11, color: T.inkDarkMuted, letterSpacing: "0.1em", marginTop: 2,
+            }}>{s.count}</div>
+          </div>
+          <div style={{
+            fontFamily: T.fontMono, fontSize: 10, letterSpacing: "0.14em",
+            color: s.status === "active" ? T.slaOk : T.sevHigh, fontWeight: 700, textTransform: "uppercase",
+          }}>{s.status}</div>
+        </div>
+      ))}
+    </div>
+  </div>
+  );
+};
+
+/* ============================================================
+ * SECURITY REPORT (Phase 2) — the AI-generated "wow" feature
+ *
+ * Jim's heartburn on the discovery call: their current reports are a 5-year-old
+ * template — "monthly meeting. Here's all the log sources we're pulling in.
+ * Here's your top 10 sources that are creating activity." Customers want MORE.
+ * Not semi-auto, not generic — AI-auto-generated, tailored, narrative, premium.
+ *
+ * This report is rendered as if it was generated overnight, reviewed by Morgan
+ * Hale (SOC analyst), and published for Kate Lin at Acme Corp. Every paragraph
+ * names something specific to Acme — Tom Webb, the 342 endpoints, the AP team,
+ * the CFO login incident still in progress. That specificity is the product.
+ * ============================================================ */
+const SecurityReportView = ({ tickets, onBack }) => {
+  const isMobile = useIsMobile();
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [pdfError, setPdfError] = useState(null);
+
+  // Derive metrics from live ticket state — feels dynamic, reinforces "tailored for you"
+  const resolved = tickets.filter((t) => t.status === "resolved");
+  const openCount = tickets.filter((t) => t.status !== "resolved").length;
+  const critOpen = tickets.filter((t) =>
+    t.severity === "critical" && t.status !== "resolved"
+  );
+  const criticalIncident = critOpen[0] || tickets.find((t) => t.severity === "critical");
+
+  // Report metadata
+  const reportMonth = "April 2026";
+  const generatedAt = "Apr 30, 2026 · 02:14 AM UTC";
+  const analyst = { name: "Morgan Hale", role: "SOC Analyst · VDA Labs", initials: "MH" };
+
+  // === PDF download: opens a print-optimized HTML in a new window, triggers print dialog ===
+  // Uses window.open() with a Blob fallback — same pattern documented in BUS_FACTOR.md.
+  // Users save as PDF via the browser's native print-to-PDF feature.
+  const handleOpenInBrowser = () => {
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>${THIS_CUSTOMER.name} · Security Report · ${reportMonth}</title>
+<style>
+  @page { size: letter; margin: 0.6in; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: Calibri, 'Segoe UI', system-ui, sans-serif;
+    color: #1A2E47; background: #fff;
+    margin: 0; padding: 0; line-height: 1.55;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  .wrap { max-width: 7in; margin: 0 auto; }
+  .eyebrow {
+    font-family: Consolas, monospace; font-size: 10px; letter-spacing: 0.28em;
+    color: #D2691E; font-weight: 700; text-transform: uppercase;
+    margin-bottom: 18px; padding-bottom: 2px;
+  }
+  .eyebrow .rule { display: inline-block; width: 24px; height: 1px; background: #D2691E; vertical-align: middle; margin-right: 10px; }
+  h1 {
+    font-family: Georgia, serif; font-size: 40px; font-weight: 500;
+    line-height: 1.08; letter-spacing: -0.02em; color: #1A2E47;
+    margin: 0 0 14px; page-break-after: avoid;
+  }
+  h1 em { font-style: italic; color: #D2691E; font-weight: 600; }
+  .subtitle {
+    font-family: Georgia, serif; font-size: 17px; color: #5A6A7D;
+    font-style: italic; line-height: 1.5; margin-bottom: 26px;
+  }
+  .cover-border { border-bottom: 2px solid #1A2E47; padding-bottom: 24px; margin-bottom: 32px; }
+  .prepared {
+    display: flex; gap: 14px; align-items: center; margin-top: 24px;
+  }
+  .prepared-badge {
+    width: 38px; height: 38px; border-radius: 50%;
+    background: #FBF0E6; color: #D2691E;
+    display: flex; align-items: center; justify-content: center;
+    font-family: Consolas, monospace; font-size: 12px; font-weight: 700;
+  }
+  .prepared-label {
+    font-family: Consolas, monospace; font-size: 9px; letter-spacing: 0.22em;
+    color: #8A97A5; font-weight: 700; text-transform: uppercase;
+  }
+  .prepared-name { font-size: 13px; font-weight: 600; color: #1A2E47; }
+  .prepared-meta { font-family: Consolas, monospace; font-size: 9px; color: #8A97A5; letter-spacing: 0.08em; }
+  h2 {
+    font-family: Georgia, serif; font-size: 22px; font-weight: 400;
+    color: #1A2E47; margin: 32px 0 4px;
+    page-break-after: avoid;
+  }
+  .section-lead {
+    font-family: Georgia, serif; font-size: 14px; color: #5A6A7D;
+    font-style: italic; margin-bottom: 18px;
+  }
+  section { margin-bottom: 28px; page-break-inside: avoid; }
+  .take {
+    background: #1A2E47; color: #fff; padding: 22px 26px; border-radius: 4px;
+    display: flex; gap: 18px; align-items: stretch;
+    page-break-inside: avoid;
+  }
+  .take-label {
+    font-family: Consolas, monospace; font-size: 9px; letter-spacing: 0.32em;
+    color: #D2691E; font-weight: 700; text-transform: uppercase;
+    padding-right: 16px; border-right: 1px solid rgba(255,255,255,0.15);
+    white-space: nowrap; flex-shrink: 0; align-self: center;
+  }
+  .take-body { font-family: Georgia, serif; font-size: 15px; line-height: 1.5; color: #F5F4F0; }
+  .metrics {
+    display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 10px;
+    margin-top: 8px;
+  }
+  .metric {
+    padding: 14px; background: #FAFAF7;
+    border: 1px solid #D8DCE2; border-radius: 4px;
+  }
+  .metric-label {
+    font-family: Consolas, monospace; font-size: 8px; letter-spacing: 0.18em;
+    color: #8A97A5; font-weight: 700; text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .metric-n {
+    font-family: Georgia, serif; font-size: 28px; color: #D2691E;
+    font-weight: 400; line-height: 1; margin-bottom: 4px;
+  }
+  .metric-c { font-size: 10px; color: #5A6A7D; line-height: 1.4; }
+  .metric-t { font-family: Consolas, monospace; font-size: 9px; font-weight: 600; letter-spacing: 0.1em; margin-top: 6px; }
+  .metric-t.down { color: #5B8F6F; }
+  .metric-t.up { color: #6B93B8; }
+  .metric-t.steady { color: #8A97A5; }
+  .incident {
+    padding: 22px; background: rgba(210,105,30,0.04);
+    border: 1px solid rgba(210,105,30,0.22);
+    border-left: 3px solid #D2691E; border-radius: 4px;
+    page-break-inside: avoid;
+  }
+  .incident-id {
+    font-family: Consolas, monospace; font-size: 10px; letter-spacing: 0.2em;
+    color: #D2691E; font-weight: 700; text-transform: uppercase; margin-bottom: 4px;
+  }
+  .incident-meta { font-family: Consolas, monospace; font-size: 10px; color: #8A97A5; margin-bottom: 12px; }
+  .incident h3 { font-family: Georgia, serif; font-size: 19px; font-weight: 500; line-height: 1.3; margin: 0 0 14px; color: #1A2E47; }
+  .incident p { font-size: 14px; line-height: 1.6; margin: 0 0 12px; color: #1A2E47; }
+  .incident .actions {
+    padding: 10px 14px; background: rgba(91,143,111,0.06);
+    border-left: 2px solid #5B8F6F; margin: 0 0 12px;
+    font-style: italic;
+  }
+  .pattern-grid { display: grid; gap: 10px; }
+  .pattern {
+    padding: 16px; background: #FAFAF7;
+    border: 1px solid #D8DCE2; border-radius: 4px;
+    page-break-inside: avoid;
+  }
+  .pattern h4 { font-family: Georgia, serif; font-size: 16px; font-weight: 500; margin: 0 0 8px; line-height: 1.3; color: #1A2E47; }
+  .pattern p { font-size: 13px; line-height: 1.6; margin: 0; color: #1A2E47; }
+  .blocked {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+    page-break-inside: avoid;
+  }
+  .blocked-cell {
+    padding: 14px; background: #FAFAF7; border: 1px solid #D8DCE2;
+    border-radius: 4px; display: flex; gap: 12px; align-items: flex-start;
+  }
+  .blocked-icon {
+    width: 30px; height: 30px; border-radius: 6px;
+    background: rgba(91,143,111,0.18); color: #5B8F6F;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    font-family: Georgia, serif; font-size: 14px; font-weight: 700;
+  }
+  .blocked-n { font-family: Georgia, serif; font-size: 20px; font-weight: 500; color: #1A2E47; line-height: 1; margin-bottom: 3px; }
+  .blocked-t { font-size: 12px; font-weight: 500; color: #1A2E47; }
+  .blocked-s { font-family: Consolas, monospace; font-size: 9px; color: #8A97A5; letter-spacing: 0.05em; margin-top: 2px; }
+  .next-item {
+    padding: 14px 18px; background: #FAFAF7;
+    border: 1px solid #D8DCE2; border-left: 3px solid #6B93B8;
+    border-radius: 4px; margin-bottom: 10px;
+    page-break-inside: avoid;
+  }
+  .next-item.from-you {
+    background: rgba(210,105,30,0.05);
+    border-color: rgba(210,105,30,0.22);
+    border-left-color: #D2691E;
+  }
+  .next-label {
+    font-family: Consolas, monospace; font-size: 9px; letter-spacing: 0.22em;
+    font-weight: 700; text-transform: uppercase; margin-bottom: 5px;
+    color: #6B93B8;
+  }
+  .next-item.from-you .next-label { color: #D2691E; }
+  .next-body { font-size: 13px; line-height: 1.6; color: #1A2E47; }
+  .signoff {
+    padding-top: 22px; border-top: 1px solid #D8DCE2;
+    display: flex; gap: 14px; align-items: flex-start;
+    page-break-inside: avoid;
+  }
+  .signoff-badge {
+    width: 42px; height: 42px; border-radius: 50%;
+    background: #FBF0E6; color: #D2691E;
+    display: flex; align-items: center; justify-content: center;
+    font-family: Consolas, monospace; font-size: 13px; font-weight: 700;
+    flex-shrink: 0;
+  }
+  .signoff-quote {
+    font-family: Georgia, serif; font-size: 14px; color: #1A2E47;
+    font-style: italic; line-height: 1.55; margin-bottom: 8px;
+  }
+  .signoff-name {
+    font-family: Consolas, monospace; font-size: 10px; letter-spacing: 0.14em;
+    color: #8A97A5; font-weight: 600; text-transform: uppercase;
+  }
+  .footer-branding {
+    margin-top: 36px; padding-top: 16px; border-top: 1px solid #D8DCE2;
+    display: flex; justify-content: space-between; gap: 10px;
+    font-family: Consolas, monospace; font-size: 9px; letter-spacing: 0.14em;
+    color: #8A97A5; text-transform: uppercase;
+  }
+  @media print { .noprint { display: none !important; } }
+  .noprint {
+    position: fixed; top: 14px; right: 14px;
+    background: #1A2E47; color: #fff;
+    padding: 10px 16px; border: none; border-radius: 4px;
+    font-family: Calibri, sans-serif; font-size: 13px; font-weight: 500;
+    cursor: pointer; z-index: 999;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.15);
+  }
+</style>
+</head>
+<body>
+<button class="noprint" onclick="window.print()">Save as PDF →</button>
+<div class="wrap">
+
+<div class="eyebrow"><span class="rule"></span>Security Report · ${reportMonth}</div>
+<div class="cover-border">
+  <h1>A quieter month than March — with<br/>one thing still on the table.</h1>
+  <div class="subtitle">${THIS_CUSTOMER.name} · ${reportMonth}. Prepared for ${THIS_CUSTOMER.primaryContact.name} and the security team.</div>
+  <div class="prepared">
+    <div class="prepared-badge">${analyst.initials}</div>
+    <div>
+      <div class="prepared-label">Prepared by</div>
+      <div class="prepared-name">${analyst.name}</div>
+      <div class="prepared-meta">${analyst.role} · ${generatedAt}</div>
+    </div>
+  </div>
+</div>
+
+<section>
+  <div class="take">
+    <div class="take-label">The take</div>
+    <div class="take-body">VDA surfaced ${openCount + resolved.length} events across your environment this month — ${openCount} still need your attention, ${resolved.length} resolved. No customer data left your network without authorization. The outstanding case — an unusual sign-in to your CFO's account from Lagos — is under active investigation.</div>
+  </div>
+</section>
+
+<section>
+  <h2>Month at a glance</h2>
+  <div class="section-lead">Four numbers worth keeping in mind.</div>
+  <div class="metrics">
+    <div class="metric"><div class="metric-label">Signals investigated</div><div class="metric-n">18,340</div><div class="metric-c">SNYPR anomalies analyzed</div><div class="metric-t up">+12% vs last month</div></div>
+    <div class="metric"><div class="metric-label">Incidents reported</div><div class="metric-n">8</div><div class="metric-c">After SOC review</div><div class="metric-t down">-30% vs last month</div></div>
+    <div class="metric"><div class="metric-label">Phishing blocked</div><div class="metric-n">124</div><div class="metric-c">Before they hit inboxes</div><div class="metric-t up">+18% vs last month</div></div>
+    <div class="metric"><div class="metric-label">Signal-to-noise</div><div class="metric-n">99.6%</div><div class="metric-c">Routine noise filtered</div><div class="metric-t steady">steady vs last month</div></div>
+  </div>
+</section>
+
+<section>
+  <h2>The one that mattered</h2>
+  <div class="section-lead">Out of ${openCount + resolved.length} events, this is the one still worth your time.</div>
+  <div class="incident">
+    <div class="incident-id">Case ${criticalIncident ? criticalIncident.id : "VDA-1847"}</div>
+    <div class="incident-meta">In progress · assigned to Sibe Klomp</div>
+    <h3>Unusual sign-in to Tom Webb's account from Lagos, Nigeria</h3>
+    <p>On April 17 at 14:16 UTC, SNYPR flagged an authentication event from an IP in Lagos against your CFO's Microsoft 365 identity. The sign-in succeeded, but the session was isolated within 42 seconds of detection — before any mail was read, any file was downloaded, or any conditional-access rule was bypassed.</p>
+    <p>The pattern didn't match Tom's travel history. He's never signed in from Nigeria. His last recorded location before this event was Denver, four hours earlier. VDA reached out to your team the same minute we isolated the session, and we're still waiting on confirmation that Tom isn't traveling — once you confirm, we finalize remediation (rotate credentials, review any cross-tenant access, rebuild conditional access rules if needed).</p>
+    <div class="actions">What VDA has done already: session isolated, credentials flagged for rotation, SentinelOne endpoint scan completed (clean), and a timeline of the attacker's attempted actions preserved for your records.</div>
+    <p>The ticket thread in your portal has the full timeline. We'll update you the moment we hear from you, and we don't close this case without your sign-off.</p>
+  </div>
+</section>
+
+<section>
+  <h2>Patterns we only see in your environment</h2>
+  <div class="section-lead">Across VDA's 150+ customers, these three things are unique to ${THIS_CUSTOMER.name}.</div>
+  <div class="pattern-grid">
+    <div class="pattern"><h4>Your AP team is the most-targeted team at Acme</h4><p>62% of the phishing we blocked this month was addressed to accounts-payable. Across our book of business, AP teams account for roughly 30% of phishing volume — yours is running at twice that. Attackers have identified your team as a high-value target, likely because of the invoice-heavy workflow. We've tuned detection rules specifically for invoice-theme lures on your domain.</p></div>
+    <div class="pattern"><h4>Your patch cadence is the fastest in your industry peer set</h4><p>Critical patches landed on 98% of your 342 endpoints within 72 hours of vendor release this month. Industry median is 58%. This is a posture strength worth knowing — and worth staying honest about if your team ever considers loosening the policy.</p></div>
+    <div class="pattern"><h4>Nobody in Acme has had an identity incident in 14 months — until this week</h4><p>The Lagos sign-in is the first identity-targeted event against your organization since February 2025. That's a meaningful streak, and it tells us two things: your MFA enforcement is working, and this attacker is probably worth understanding better. We'll include what we learn in next month's report.</p></div>
+  </div>
+</section>
+
+<section>
+  <h2>What we blocked that you didn't see</h2>
+  <div class="section-lead">The invisible work — what didn't reach your team.</div>
+  <div class="blocked">
+    <div class="blocked-cell"><div class="blocked-icon">✓</div><div><div class="blocked-n">124</div><div class="blocked-t">Phishing emails blocked</div><div class="blocked-s">Before inbox delivery · 58 AP-targeted</div></div></div>
+    <div class="blocked-cell"><div class="blocked-icon">✓</div><div><div class="blocked-n">7</div><div class="blocked-t">Malicious file uploads stopped</div><div class="blocked-s">SentinelOne quarantine · 2 ransomware IOCs</div></div></div>
+    <div class="blocked-cell"><div class="blocked-icon">✓</div><div><div class="blocked-n">42</div><div class="blocked-t">Credential-stuffing attempts</div><div class="blocked-s">Against your M365 tenant · all blocked</div></div></div>
+    <div class="blocked-cell"><div class="blocked-icon">✓</div><div><div class="blocked-n">3</div><div class="blocked-t">Risky OAuth app connections</div><div class="blocked-s">Flagged and denied by policy</div></div></div>
+  </div>
+</section>
+
+<section>
+  <h2>What's coming next month</h2>
+  <div class="section-lead">Two small things from our side. One small thing from yours.</div>
+  <div class="next-item">
+    <div class="next-label">From us · May 6</div>
+    <div class="next-body"><strong>Detection tuning for invoice-theme phishing.</strong> We're deploying a new signature set trained on the patterns we saw targeting your AP team in April. No action from you — this runs inside SNYPR on our side.</div>
+  </div>
+  <div class="next-item">
+    <div class="next-label">From us · May 12</div>
+    <div class="next-body"><strong>Quarterly penetration test kickoff.</strong> Scheduled for Q2 per your contract. Our team will coordinate scope with ${THIS_CUSTOMER.primaryContact.name} the week before.</div>
+  </div>
+  <div class="next-item from-you">
+    <div class="next-label">From you · as soon as you can</div>
+    <div class="next-body"><strong>Confirm Tom Webb's travel status.</strong> This is the one piece we need to finalize the Lagos investigation. The ticket in your portal has a reply button — a one-line answer unblocks us.</div>
+  </div>
+</section>
+
+<section class="signoff">
+  <div class="signoff-badge">${analyst.initials}</div>
+  <div>
+    <div class="signoff-quote">"Quiet month overall — the Lagos sign-in is the thing that could get louder, so please ping back when you have a read on Tom. Any questions on what's in here, reply directly to me."</div>
+    <div class="signoff-name">— ${analyst.name} · ${analyst.role}</div>
+  </div>
+</section>
+
+<div class="footer-branding">
+  <div>VDA Labs · SOC Services</div>
+  <div>${THIS_CUSTOMER.name} · ${reportMonth}</div>
+  <div>Confidential · prepared for recipient only</div>
+</div>
+
+</div>
+</body>
+</html>`;
+
+    // Open in new window — fallback to Blob download if popup blocked
+    const w = window.open("", "_blank");
+    if (w) {
+      w.document.open();
+      w.document.write(html);
+      w.document.close();
+    } else {
+      // Popup blocked — fall back to Blob download
+      const blob = new Blob([html], { type: "text/html" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${THIS_CUSTOMER.name.replace(/\s+/g, "_")}_Security_Report_${reportMonth.replace(/\s+/g, "_")}.html`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+  };
+
+  // === TRUE PDF DOWNLOAD ===
+  // Loads jsPDF from CDN on demand, renders the report to an actual .pdf file.
+  // Works in artifact sandboxes, Netlify, and anywhere else the browser is modern.
+  // Falls back to the HTML-in-new-window path if the CDN fetch fails.
+  const loadScript = (src) => new Promise((resolve, reject) => {
+    // Check if already loaded
+    if (document.querySelector(`script[src="${src}"]`)) {
+      return resolve();
+    }
+    const s = document.createElement("script");
+    s.src = src;
+    s.async = true;
+    s.onload = () => resolve();
+    s.onerror = (e) => reject(new Error(`Failed to load ${src}`));
+    document.head.appendChild(s);
+  });
+
+  const handleDownloadPDFFile = async () => {
+    setPdfBusy(true);
+    try {
+      // Load jsPDF from cdnjs (a single UMD bundle, ~400KB, cached after first load)
+      await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js");
+
+      // eslint-disable-next-line no-undef
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ unit: "pt", format: "letter", compress: true });
+
+      // Page geometry (letter = 612 × 792 pt at 72dpi, 0.6in margins = 43.2pt)
+      const pageW = 612, pageH = 792, margin = 43;
+      const contentW = pageW - margin * 2;
+      let y = margin;
+
+      // Brand colors as RGB for jsPDF
+      const cOrange = [210, 105, 30];
+      const cNavy = [26, 46, 71];
+      const cMuted = [138, 151, 165];
+      const cDim = [90, 106, 125];
+      const cGreen = [91, 143, 111];
+      const cLightBg = [250, 250, 247];
+      const cDivider = [216, 220, 226];
+
+      const newPageIfNeeded = (needed) => {
+        if (y + needed > pageH - margin) {
+          doc.addPage();
+          y = margin;
+        }
+      };
+
+      const drawText = (txt, opts = {}) => {
+        const {
+          size = 11, font = "helvetica", weight = "normal", color = cNavy,
+          maxWidth = contentW, leading = 1.4, gapAfter = 0, italic = false,
+        } = opts;
+        doc.setFont(font, italic ? "italic" : weight);
+        doc.setFontSize(size);
+        doc.setTextColor(...color);
+        const lines = doc.splitTextToSize(txt, maxWidth);
+        const lineHeight = size * leading;
+        newPageIfNeeded(lines.length * lineHeight);
+        lines.forEach((line) => {
+          doc.text(line, margin, y);
+          y += lineHeight;
+        });
+        y += gapAfter;
+      };
+
+      const drawRule = (color = cDivider, thickness = 0.6) => {
+        doc.setDrawColor(...color);
+        doc.setLineWidth(thickness);
+        doc.line(margin, y, margin + contentW, y);
+        y += 12;
+      };
+
+      const drawBox = (h, fill, borderColor, borderLeftColor) => {
+        newPageIfNeeded(h);
+        if (fill) {
+          doc.setFillColor(...fill);
+          doc.rect(margin, y, contentW, h, "F");
+        }
+        if (borderColor) {
+          doc.setDrawColor(...borderColor);
+          doc.setLineWidth(0.6);
+          doc.rect(margin, y, contentW, h, "S");
+        }
+        if (borderLeftColor) {
+          doc.setFillColor(...borderLeftColor);
+          doc.rect(margin, y, 3, h, "F");
+        }
+      };
+
+      // ─── COVER ───
+      // Orange eyebrow rule
+      doc.setDrawColor(...cOrange);
+      doc.setLineWidth(1);
+      doc.line(margin, y, margin + 24, y);
+      y += 10;
+      drawText(`SECURITY REPORT  ·  ${reportMonth.toUpperCase()}`, {
+        size: 9, font: "courier", weight: "bold", color: cOrange, gapAfter: 18,
+      });
+
+      // Big Georgia-style headline (using times as closest default font)
+      drawText("A quieter month than March — with one thing", {
+        size: 26, font: "times", weight: "normal", color: cNavy, leading: 1.1,
+      });
+      drawText("still on the table.", {
+        size: 26, font: "times", weight: "normal", color: cNavy, leading: 1.1, gapAfter: 14,
+      });
+
+      drawText(
+        `${THIS_CUSTOMER.name} · ${reportMonth}. Prepared for ${THIS_CUSTOMER.primaryContact.name} and the security team.`,
+        { size: 13, font: "times", italic: true, color: cDim, leading: 1.5, gapAfter: 18 }
+      );
+
+      // Prepared by row
+      drawText("PREPARED BY", {
+        size: 8, font: "courier", weight: "bold", color: cMuted, gapAfter: 2,
+      });
+      drawText(analyst.name, {
+        size: 12, font: "helvetica", weight: "bold", color: cNavy, gapAfter: 1,
+      });
+      drawText(`${analyst.role} · ${generatedAt}`, {
+        size: 9, font: "courier", color: cMuted, gapAfter: 16,
+      });
+
+      // Navy underline (2pt, like the CSS border-bottom)
+      doc.setDrawColor(...cNavy);
+      doc.setLineWidth(2);
+      doc.line(margin, y, margin + contentW, y);
+      y += 22;
+
+      // ─── "The take" callout (navy block with one-sentence conclusion) ───
+      const takeText = `VDA surfaced ${openCount + resolved.length} events across your environment this month — ${openCount} still need your attention, ${resolved.length} resolved. No customer data left your network without authorization. The outstanding case — an unusual sign-in to your CFO's account from Lagos — is under active investigation.`;
+      doc.setFont("times", "normal");
+      doc.setFontSize(12);
+      const takeLines = doc.splitTextToSize(takeText, contentW - 90);
+      const takeH = Math.max(60, takeLines.length * 15 + 24);
+      newPageIfNeeded(takeH + 20);
+      doc.setFillColor(...cNavy);
+      doc.rect(margin, y, contentW, takeH, "F");
+      doc.setFont("courier", "bold");
+      doc.setFontSize(8);
+      doc.setTextColor(...cOrange);
+      doc.text("THE TAKE", margin + 14, y + 18);
+      doc.setFont("times", "normal");
+      doc.setFontSize(12);
+      doc.setTextColor(245, 244, 240);
+      takeLines.forEach((line, i) => {
+        doc.text(line, margin + 85, y + 18 + i * 15);
+      });
+      y += takeH + 24;
+
+      // ─── MONTH AT A GLANCE ───
+      drawText("Month at a glance", {
+        size: 18, font: "times", color: cNavy, leading: 1.2, gapAfter: 4,
+      });
+      drawText("Four numbers worth keeping in mind.", {
+        size: 11, font: "times", italic: true, color: cDim, gapAfter: 14,
+      });
+
+      const metrics = [
+        { n: "18,340", l: "Signals investigated", c: "SNYPR anomalies analyzed", t: "+12% vs last month" },
+        { n: "8", l: "Incidents reported", c: "After SOC review", t: "-30% vs last month" },
+        { n: "124", l: "Phishing blocked", c: "Before they hit inboxes", t: "+18% vs last month" },
+        { n: "99.6%", l: "Signal-to-noise", c: "Routine noise filtered", t: "steady vs last month" },
+      ];
+      const cellW = (contentW - 12 * 3) / 4;
+      const cellH = 78;
+      newPageIfNeeded(cellH + 10);
+      metrics.forEach((m, i) => {
+        const x = margin + (cellW + 12) * i;
+        doc.setFillColor(...cLightBg);
+        doc.rect(x, y, cellW, cellH, "F");
+        doc.setDrawColor(...cDivider);
+        doc.setLineWidth(0.5);
+        doc.rect(x, y, cellW, cellH, "S");
+        doc.setFont("courier", "bold");
+        doc.setFontSize(7);
+        doc.setTextColor(...cMuted);
+        doc.text(m.l.toUpperCase(), x + 10, y + 14);
+        doc.setFont("times", "normal");
+        doc.setFontSize(22);
+        doc.setTextColor(...cOrange);
+        doc.text(m.n, x + 10, y + 40);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8);
+        doc.setTextColor(...cDim);
+        const cLines = doc.splitTextToSize(m.c, cellW - 20);
+        cLines.forEach((line, li) => doc.text(line, x + 10, y + 52 + li * 10));
+        doc.setFont("courier", "bold");
+        doc.setFontSize(7);
+        const tColor = m.t.startsWith("-") ? cGreen : m.t.includes("steady") ? cMuted : [107, 147, 184];
+        doc.setTextColor(...tColor);
+        doc.text(m.t, x + 10, y + cellH - 8);
+      });
+      y += cellH + 24;
+
+      // ─── THE ONE THAT MATTERED ───
+      newPageIfNeeded(60);
+      drawText("The one that mattered", {
+        size: 18, font: "times", color: cNavy, leading: 1.2, gapAfter: 4,
+      });
+      drawText(`Out of ${openCount + resolved.length} events, this is the one still worth your time.`, {
+        size: 11, font: "times", italic: true, color: cDim, gapAfter: 14,
+      });
+
+      const incidentParas = [
+        `Case ${criticalIncident ? criticalIncident.id : "VDA-1847"}  ·  In progress · assigned to Sibe Klomp`,
+        "Unusual sign-in to Tom Webb's account from Lagos, Nigeria",
+        "On April 17 at 14:16 UTC, SNYPR flagged an authentication event from an IP in Lagos against your CFO's Microsoft 365 identity. The sign-in succeeded, but the session was isolated within 42 seconds of detection — before any mail was read, any file was downloaded, or any conditional-access rule was bypassed.",
+        "The pattern didn't match Tom's travel history. He's never signed in from Nigeria. His last recorded location before this event was Denver, four hours earlier. VDA reached out to your team the same minute we isolated the session, and we're still waiting on confirmation that Tom isn't traveling — once you confirm, we finalize remediation (rotate credentials, review cross-tenant access, rebuild conditional-access rules if needed).",
+        "ACTIONS_PULLQUOTE:What VDA has done already: session isolated, credentials flagged for rotation, SentinelOne endpoint scan completed (clean), and a timeline of the attacker's attempted actions preserved for your records.",
+        "The ticket thread in your portal has the full timeline. We'll update you the moment we hear from you, and we don't close this case without your sign-off.",
+      ];
+
+      // Calculate height
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(11);
+      let incidentH = 18 + 16 + 8; // case id + title anchor + padding
+      const wrapped = [];
+      incidentParas.forEach((p) => {
+        if (p.startsWith("Case ")) {
+          wrapped.push({ type: "meta", text: p });
+          incidentH += 16;
+        } else if (p.startsWith("Unusual sign-in")) {
+          wrapped.push({ type: "h3", text: p });
+          doc.setFont("times", "bold");
+          doc.setFontSize(14);
+          const tl = doc.splitTextToSize(p, contentW - 28);
+          wrapped[wrapped.length - 1].lines = tl;
+          incidentH += tl.length * 17 + 10;
+        } else if (p.startsWith("ACTIONS_PULLQUOTE:")) {
+          const text = p.replace("ACTIONS_PULLQUOTE:", "");
+          doc.setFont("times", "italic");
+          doc.setFontSize(11);
+          const tl = doc.splitTextToSize(text, contentW - 40);
+          wrapped.push({ type: "pull", text, lines: tl });
+          incidentH += tl.length * 14 + 24;
+        } else {
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(11);
+          const tl = doc.splitTextToSize(p, contentW - 28);
+          wrapped.push({ type: "p", text: p, lines: tl });
+          incidentH += tl.length * 14 + 10;
+        }
+      });
+
+      newPageIfNeeded(incidentH);
+      const incY = y;
+      doc.setFillColor(253, 246, 238);
+      doc.rect(margin, incY, contentW, incidentH, "F");
+      doc.setFillColor(...cOrange);
+      doc.rect(margin, incY, 3, incidentH, "F");
+      doc.setDrawColor(210, 105, 30, 0.4);
+      doc.setLineWidth(0.4);
+      doc.rect(margin, incY, contentW, incidentH, "S");
+
+      let incY2 = incY + 18;
+      wrapped.forEach((item) => {
+        if (item.type === "meta") {
+          doc.setFont("courier", "bold");
+          doc.setFontSize(8);
+          doc.setTextColor(...cOrange);
+          doc.text(item.text.toUpperCase(), margin + 14, incY2);
+          incY2 += 14;
+        } else if (item.type === "h3") {
+          doc.setFont("times", "bold");
+          doc.setFontSize(14);
+          doc.setTextColor(...cNavy);
+          item.lines.forEach((line) => {
+            doc.text(line, margin + 14, incY2);
+            incY2 += 17;
+          });
+          incY2 += 8;
+        } else if (item.type === "p") {
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(11);
+          doc.setTextColor(...cNavy);
+          item.lines.forEach((line) => {
+            doc.text(line, margin + 14, incY2);
+            incY2 += 14;
+          });
+          incY2 += 8;
+        } else if (item.type === "pull") {
+          // Sage-green left-border pullquote
+          const pullY = incY2;
+          const pullH = item.lines.length * 13 + 18;
+          doc.setFillColor(245, 250, 245);
+          doc.rect(margin + 14, pullY, contentW - 28, pullH, "F");
+          doc.setFillColor(...cGreen);
+          doc.rect(margin + 14, pullY, 2, pullH, "F");
+          doc.setFont("times", "italic");
+          doc.setFontSize(11);
+          doc.setTextColor(...cNavy);
+          incY2 += 14;
+          item.lines.forEach((line) => {
+            doc.text(line, margin + 26, incY2);
+            incY2 += 13;
+          });
+          incY2 += 16;
+        }
+      });
+      y = incY + incidentH + 24;
+
+      // ─── PATTERNS ───
+      newPageIfNeeded(60);
+      drawText("Patterns we only see in your environment", {
+        size: 18, font: "times", color: cNavy, leading: 1.2, gapAfter: 4,
+      });
+      drawText(`Across VDA's 150+ customers, these three things are unique to ${THIS_CUSTOMER.name}.`, {
+        size: 11, font: "times", italic: true, color: cDim, gapAfter: 14,
+      });
+
+      const patterns = [
+        ["Your AP team is the most-targeted team at Acme",
+          "62% of the phishing we blocked this month was addressed to accounts-payable. Across our book of business, AP teams account for roughly 30% of phishing volume — yours is running at twice that. Attackers have identified your team as a high-value target, likely because of the invoice-heavy workflow. We've tuned detection rules specifically for invoice-theme lures on your domain."],
+        ["Your patch cadence is the fastest in your industry peer set",
+          "Critical patches landed on 98% of your 342 endpoints within 72 hours of vendor release this month. Industry median is 58%. This is a posture strength worth knowing — and worth staying honest about if your team ever considers loosening the policy."],
+        ["Nobody in Acme has had an identity incident in 14 months — until this week",
+          "The Lagos sign-in is the first identity-targeted event against your organization since February 2025. That's a meaningful streak, and it tells us two things: your MFA enforcement is working, and this attacker is probably worth understanding better. We'll include what we learn in next month's report."],
+      ];
+      patterns.forEach(([title, body]) => {
+        doc.setFont("times", "bold");
+        doc.setFontSize(13);
+        const titleLines = doc.splitTextToSize(title, contentW - 28);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(10);
+        const bodyLines = doc.splitTextToSize(body, contentW - 28);
+        const boxH = titleLines.length * 15 + bodyLines.length * 13 + 24;
+        newPageIfNeeded(boxH + 10);
+        doc.setFillColor(...cLightBg);
+        doc.rect(margin, y, contentW, boxH, "F");
+        doc.setDrawColor(...cDivider);
+        doc.setLineWidth(0.4);
+        doc.rect(margin, y, contentW, boxH, "S");
+        let py = y + 16;
+        doc.setFont("times", "bold");
+        doc.setFontSize(13);
+        doc.setTextColor(...cNavy);
+        titleLines.forEach((l) => { doc.text(l, margin + 14, py); py += 15; });
+        py += 4;
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(10);
+        doc.setTextColor(...cNavy);
+        bodyLines.forEach((l) => { doc.text(l, margin + 14, py); py += 13; });
+        y += boxH + 10;
+      });
+      y += 12;
+
+      // ─── WHAT WE BLOCKED ───
+      newPageIfNeeded(60);
+      drawText("What we blocked that you didn't see", {
+        size: 18, font: "times", color: cNavy, leading: 1.2, gapAfter: 4,
+      });
+      drawText("The invisible work — what didn't reach your team.", {
+        size: 11, font: "times", italic: true, color: cDim, gapAfter: 14,
+      });
+
+      const blocked = [
+        ["124", "Phishing emails blocked", "Before inbox delivery · 58 AP-targeted"],
+        ["7", "Malicious file uploads stopped", "SentinelOne quarantine · 2 ransomware IOCs"],
+        ["42", "Credential-stuffing attempts", "Against your M365 tenant · all blocked"],
+        ["3", "Risky OAuth app connections", "Flagged and denied by policy"],
+      ];
+      const bw = (contentW - 12) / 2;
+      const bh = 64;
+      for (let i = 0; i < blocked.length; i += 2) {
+        newPageIfNeeded(bh + 10);
+        [0, 1].forEach((col) => {
+          const item = blocked[i + col];
+          if (!item) return;
+          const [n, t, s] = item;
+          const x = margin + (bw + 12) * col;
+          doc.setFillColor(...cLightBg);
+          doc.rect(x, y, bw, bh, "F");
+          doc.setDrawColor(...cDivider);
+          doc.setLineWidth(0.4);
+          doc.rect(x, y, bw, bh, "S");
+          doc.setFillColor(232, 243, 235);
+          doc.roundedRect(x + 12, y + 16, 28, 28, 4, 4, "F");
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(14);
+          doc.setTextColor(...cGreen);
+          doc.text("✓", x + 20, y + 34);
+          doc.setFont("times", "normal");
+          doc.setFontSize(18);
+          doc.setTextColor(...cNavy);
+          doc.text(n, x + 50, y + 28);
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(10);
+          doc.text(t, x + 50, y + 42);
+          doc.setFont("courier", "normal");
+          doc.setFontSize(8);
+          doc.setTextColor(...cMuted);
+          doc.text(s, x + 50, y + 54);
+        });
+        y += bh + 10;
+      }
+      y += 12;
+
+      // ─── WHAT'S COMING NEXT MONTH ───
+      newPageIfNeeded(60);
+      drawText("What's coming next month", {
+        size: 18, font: "times", color: cNavy, leading: 1.2, gapAfter: 4,
+      });
+      drawText("Two small things from our side. One small thing from yours.", {
+        size: 11, font: "times", italic: true, color: cDim, gapAfter: 14,
+      });
+
+      const next = [
+        ["From us · May 6", "Detection tuning for invoice-theme phishing.", "We're deploying a new signature set trained on the patterns we saw targeting your AP team in April. No action from you — this runs inside SNYPR on our side.", "us"],
+        ["From us · May 12", "Quarterly penetration test kickoff.", `Scheduled for Q2 per your contract. Our team will coordinate scope with ${THIS_CUSTOMER.primaryContact.name} the week before.`, "us"],
+        ["From you · as soon as you can", "Confirm Tom Webb's travel status.", "This is the one piece we need to finalize the Lagos investigation. The ticket in your portal has a reply button — a one-line answer unblocks us.", "you"],
+      ];
+      next.forEach(([label, bold, rest, who]) => {
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(10);
+        const bodyLines = doc.splitTextToSize(`${bold} ${rest}`, contentW - 28);
+        const h = 18 + bodyLines.length * 13 + 12;
+        newPageIfNeeded(h + 8);
+        doc.setFillColor(...(who === "you" ? [253, 246, 238] : cLightBg));
+        doc.rect(margin, y, contentW, h, "F");
+        doc.setFillColor(...(who === "you" ? cOrange : [107, 147, 184]));
+        doc.rect(margin, y, 3, h, "F");
+        doc.setDrawColor(...cDivider);
+        doc.setLineWidth(0.4);
+        doc.rect(margin, y, contentW, h, "S");
+        doc.setFont("courier", "bold");
+        doc.setFontSize(8);
+        doc.setTextColor(...(who === "you" ? cOrange : [107, 147, 184]));
+        doc.text(label.toUpperCase(), margin + 14, y + 14);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(10);
+        doc.setTextColor(...cNavy);
+        doc.text(bold, margin + 14, y + 28);
+        doc.setFont("helvetica", "normal");
+        const restLines = doc.splitTextToSize(rest, contentW - 28);
+        let ny = y + 42;
+        restLines.forEach((l) => { doc.text(l, margin + 14, ny); ny += 13; });
+        y += h + 8;
+      });
+      y += 16;
+
+      // ─── SIGN-OFF ───
+      newPageIfNeeded(80);
+      doc.setDrawColor(...cDivider);
+      doc.setLineWidth(0.5);
+      doc.line(margin, y, margin + contentW, y);
+      y += 18;
+      doc.setFont("times", "italic");
+      doc.setFontSize(12);
+      doc.setTextColor(...cNavy);
+      const quote = '"Quiet month overall — the Lagos sign-in is the thing that could get louder, so please ping back when you have a read on Tom. Any questions on what\'s in here, reply directly to me."';
+      const ql = doc.splitTextToSize(quote, contentW - 14);
+      ql.forEach((line) => { doc.text(line, margin, y); y += 16; });
+      y += 6;
+      doc.setFont("courier", "bold");
+      doc.setFontSize(9);
+      doc.setTextColor(...cMuted);
+      doc.text(`— ${analyst.name.toUpperCase()} · ${analyst.role.toUpperCase()}`, margin, y);
+      y += 28;
+
+      // Footer branding
+      doc.setDrawColor(...cDivider);
+      doc.line(margin, y, margin + contentW, y);
+      y += 14;
+      doc.setFont("courier", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(...cMuted);
+      doc.text("VDA LABS · SOC SERVICES", margin, y);
+      doc.text(`${THIS_CUSTOMER.name.toUpperCase()} · ${reportMonth.toUpperCase()}`, margin + contentW / 2 - 50, y);
+      doc.text("CONFIDENTIAL", margin + contentW - 75, y);
+
+      // Save — this triggers the actual file download in every browser
+      const filename = `${THIS_CUSTOMER.name.replace(/\s+/g, "_")}_Security_Report_${reportMonth.replace(/\s+/g, "_")}.pdf`;
+      doc.save(filename);
+      setPdfError(null);
+    } catch (err) {
+      console.error("PDF generation failed:", err);
+      // Show user-visible error, then fall back to opening in browser
+      setPdfError("Couldn't generate PDF — opened report in a new tab instead.");
+      handleOpenInBrowser();
+      // Clear error after 5 seconds
+      setTimeout(() => setPdfError(null), 5000);
+    } finally {
+      setPdfBusy(false);
+    }
+  };
+
+  return (
+    <div style={{
+      background: T.bgLight, minHeight: "calc(100vh - 60px)",
+    }}>
+      {/* Page chrome: back nav + download affordance */}
+      <div style={{
+        maxWidth: 820, margin: "0 auto",
+        padding: isMobile ? "20px 16px 0" : "28px 30px 0",
+      }}>
+        <div style={{
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+          marginBottom: 16, flexWrap: "wrap", gap: 10,
+        }}>
+          <button onClick={onBack} style={{
+            display: "flex", alignItems: "center", gap: 6,
+            background: "transparent", border: "none", cursor: "pointer",
+            fontFamily: T.fontMono, fontSize: 10, letterSpacing: "0.15em",
+            color: T.inkDarkDim, fontWeight: 700, textTransform: "uppercase",
+          }}><ArrowLeft size={13} /> BACK</button>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button onClick={handleOpenInBrowser} style={{
               display: "flex", alignItems: "center", gap: 6,
-              padding: "4px 10px", borderRadius: 999,
-              background: needsDecision ? T.statusClearDim : "transparent",
-              border: `1px solid ${needsDecision ? T.slaBorder : T.borderStrong}`,
-              fontFamily: "'JetBrains Mono', monospace", fontSize: 9, letterSpacing: "0.12em",
-              color: needsDecision ? T.statusClear : T.textDim, fontWeight: 700, textTransform: "uppercase",
+              padding: "8px 14px", borderRadius: 4, cursor: "pointer",
+              background: "transparent", color: T.inkDarkDim,
+              border: `1px solid ${T.dividerLight}`,
+              fontFamily: T.fontBody, fontSize: 12, fontWeight: 500,
+              transition: "all 120ms ease",
+            }}>
+              <Eye size={12} /> Open in browser
+            </button>
+            <button onClick={handleDownloadPDFFile} disabled={pdfBusy} style={{
+              display: "flex", alignItems: "center", gap: 6,
+              padding: "8px 14px", borderRadius: 4,
+              cursor: pdfBusy ? "wait" : "pointer",
+              background: pdfBusy ? T.bgLightAlt : T.inkDark,
+              color: pdfBusy ? T.inkDarkMuted : "#fff",
+              border: "none",
+              fontFamily: T.fontBody, fontSize: 12, fontWeight: 500,
+              opacity: pdfBusy ? 0.7 : 1,
+              transition: "all 120ms ease",
+            }}>
+              <Download size={12} />
+              {pdfBusy ? "Generating PDF…" : "Download PDF"}
+            </button>
+          </div>
+        </div>
+        {pdfError && (
+          <div style={{
+            marginBottom: 12, padding: "10px 14px", borderRadius: 4,
+            background: "rgba(210,105,30,0.08)",
+            border: "1px solid rgba(210,105,30,0.3)",
+            color: T.orange, fontFamily: T.fontBody, fontSize: 13,
+          }}>
+            {pdfError}
+          </div>
+        )}
+      </div>
+
+      {/* THE DOCUMENT — looks like a polished report, feels premium */}
+      <div style={{
+        maxWidth: 820, margin: "0 auto",
+        padding: isMobile ? "0 16px 40px" : "0 30px 60px",
+      }}>
+        <article style={{
+          background: T.bgLightCard,
+          border: `1px solid ${T.dividerLight}`,
+          borderRadius: 4,
+          padding: isMobile ? "36px 24px" : "64px 72px",
+          boxShadow: "0 2px 6px rgba(0,0,0,0.04), 0 16px 40px rgba(0,0,0,0.06)",
+        }}>
+
+          {/* ─── COVER / HERO ─── */}
+          <header style={{
+            borderBottom: `2px solid ${T.inkDark}`,
+            paddingBottom: 32, marginBottom: 44,
+          }}>
+            <div style={{
+              display: "flex", alignItems: "center", gap: 10, marginBottom: 24,
+              fontFamily: T.fontMono, fontSize: 10, letterSpacing: "0.28em",
+              color: T.orange, fontWeight: 700, textTransform: "uppercase",
             }}>
               <span style={{
-                width: 6, height: 6, borderRadius: "50%",
-                background: needsDecision ? T.statusClear : T.textDim,
-                animation: needsDecision ? "sentry-sla-pulse 2.5s ease-in-out infinite" : "none",
+                display: "inline-block", width: 24, height: 1, background: T.orange,
               }} />
-              {needsDecision ? `SLA ${item.slaRemaining}` : "Informational"}
+              Security Report · {reportMonth}
             </div>
-          </div>
-          <ul style={{ listStyle: "none", padding: 0, margin: 0, position: "relative" }}>
-            <div style={{ position: "absolute", left: 9, top: 10, bottom: 10, width: 1, background: T.border }} />
-            {(item.timeline || []).map((step, idx) => (
-              <li key={idx} style={{ display: "flex", gap: 14, padding: "6px 0", position: "relative", alignItems: "flex-start" }}>
-                <div style={{
-                  width: 18, height: 18, borderRadius: "50%", flexShrink: 0,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  background: step.status === "done" ? T.statusClear : step.status === "current" ? T.brandDim : T.surface,
-                  border: `1px solid ${step.status === "done" ? T.statusClear : step.status === "current" ? T.brand : T.border}`,
-                  color: "#fff",
-                  position: "relative", zIndex: 1, marginTop: 1,
-                  animation: step.status === "current" ? "sentry-sla-pulse 2.5s ease-in-out infinite" : "none",
-                }}>
-                  {step.status === "done" && <Icon name="checkSm" size={11} />}
-                  {step.status === "current" && <div style={{ width: 7, height: 7, borderRadius: "50%", background: T.brand }} />}
-                </div>
-                <div style={{ flex: 1, minWidth: 0, paddingTop: 1 }}>
-                  <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 13, fontWeight: 500, color: step.status === "current" ? T.brand : T.text, lineHeight: 1.4 }}>
-                    {step.label}
-                  </div>
-                  <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, letterSpacing: "0.08em", color: T.textDim, marginTop: 3 }}>
-                    {step.meta}
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        {/* Recommendation */}
-        <div style={{
-          ...S.contextCard,
-          borderColor: needsDecision ? "rgba(168,58,50,0.3)" : "rgba(168,101,30,0.3)",
-        }}>
-          <div style={{ ...S.eyebrow, color: accent, fontWeight: 700, marginBottom: 10 }}>Our recommendation</div>
-          <div style={S.cardTitle}>{item.recommendation}</div>
-        </div>
-
-        {/* Asset */}
-        <div style={{ display: "flex", justifyContent: "space-between", padding: "12px 0", borderTop: `1px solid ${T.border}`, borderBottom: `1px solid ${T.border}`, marginBottom: 20 }}>
-          <span style={S.metaMono}>{item.asset}</span>
-          <span style={S.metaMono}>{ago(item.timeReceived)}</span>
-        </div>
-
-        {/* Teach-back */}
-        <div style={{
-          background: T.teachGrad,
-          border: `1px solid ${T.brandEdge}`,
-          borderLeft: `3px solid ${T.brand}`,
-          borderRadius: 16,
-          padding: 18,
-          marginBottom: 20,
-          boxShadow: isDark ? "0 4px 16px rgba(0,0,0,0.25)" : "0 4px 16px rgba(200,62,0,0.08)",
-          position: "relative",
-        }}>
-          {showNotedAck && (
-            <div style={{
-              position: "absolute", left: "50%", top: -10,
-              background: T.brand, color: "#fff",
-              fontSize: 11, fontWeight: 600,
-              padding: "6px 14px", borderRadius: 999,
-              boxShadow: "0 4px 12px rgba(200,62,0,0.35)",
-              display: "flex", alignItems: "center", gap: 6,
-              whiteSpace: "nowrap",
-              fontFamily: "'Inter', sans-serif",
-              pointerEvents: "none",
-              animation: "sentry-noted-pop 2.4s cubic-bezier(0.32, 0.72, 0, 1) forwards",
+            <h1 style={{
+              fontFamily: T.fontDisplay, fontSize: isMobile ? 34 : 48,
+              color: T.inkDark, fontWeight: 400, lineHeight: 1.05,
+              letterSpacing: "-0.02em", marginBottom: 14,
             }}>
-              <Icon name="checkSm" size={11} /> Noted · carried forward
+              A quieter month than March — with<br/>one thing still on the table.
+            </h1>
+            <div style={{
+              fontFamily: T.fontDisplay, fontSize: isMobile ? 17 : 20,
+              color: T.inkDarkDim, fontStyle: "italic", lineHeight: 1.5,
+              maxWidth: 620,
+            }}>
+              {THIS_CUSTOMER.name} · {reportMonth}. Prepared for{" "}
+              {THIS_CUSTOMER.primaryContact.name} and the security team.
             </div>
-          )}
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-            <div style={{ width: 28, height: 28, borderRadius: 8, background: T.brandDim, display: "flex", alignItems: "center", justifyContent: "center", color: T.brand }}>
-              <Icon name="target" size={14} />
-            </div>
-            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, letterSpacing: "0.22em", color: T.brand, textTransform: "uppercase", fontWeight: 700 }}>
-              Before you decide
-            </div>
-          </div>
-          <div style={{ fontFamily: "'Fraunces', serif", fontSize: 18, color: T.text, marginBottom: 8, letterSpacing: "-0.005em", lineHeight: 1.3 }}>
-            How critical is this asset, really?
-          </div>
-          <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 12, color: T.textDim, lineHeight: 1.55, marginBottom: 14 }}>
-            Your answer tunes how Sentry scores future alerts on <strong style={{ color: T.text, fontWeight: 500 }}>{item.asset.split(" · ")[0]}</strong>. This is the loop that makes detection smarter for your environment specifically.
-          </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            {[
-              { key: "elevated", label: "More critical", icon: "arrowUp", upColor: true },
-              { key: "same", label: "Just right", icon: null, upColor: false },
-              { key: "lowered", label: "Less", icon: "arrowDown", upColor: false },
-            ].map((opt) => {
-              const active = criticalityChoice === opt.key;
-              let btnStyle;
-              if (opt.upColor) {
-                btnStyle = {
-                  border: `1px solid ${active ? T.statusAttention : "rgba(168,58,50,0.6)"}`,
-                  background: active ? T.statusAttention : "transparent",
-                  color: active ? "#fff" : T.statusAttention,
-                };
-              } else {
-                btnStyle = {
-                  border: `1px solid ${active ? T.textMid : T.borderStrong}`,
-                  background: active ? T.textMid : "transparent",
-                  color: active ? T.bg : T.textDim,
-                };
-              }
-              return (
-                <button key={opt.key} onClick={() => setCriticality(opt.key)} style={{
-                  flex: 1, borderRadius: 12, padding: "12px 10px",
-                  fontSize: 12, fontWeight: 500, cursor: "pointer",
-                  fontFamily: "'Inter', sans-serif",
-                  display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-                  transition: "all 180ms ease",
-                  ...btnStyle,
-                }}>
-                  {opt.icon && <Icon name={opt.icon} size={14} />} {opt.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
 
-        {/* Decision buttons */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
-          <button onClick={() => decide("APPROVED")} style={{
-            background: T.statusClear, color: "#fff", border: "none",
-            borderRadius: 16, padding: 18, fontSize: 15, fontWeight: 500,
-            cursor: "pointer", fontFamily: "'Inter', sans-serif", letterSpacing: "0.01em",
-          }}>
-            Approve{needsDecision ? " · block the session" : ""}
-          </button>
-          <button onClick={() => decide("DENIED")} style={{
-            background: "transparent", color: T.text,
-            border: `1px solid ${T.border}`, borderRadius: 16,
-            padding: 18, fontSize: 15, fontWeight: 500,
-            cursor: "pointer", fontFamily: "'Inter', sans-serif",
-          }}>
-            Override · {needsDecision ? "I'll handle directly" : "needs more review"}
-          </button>
-          <button onClick={() => decide("LATER")} style={{
-            background: "transparent", color: T.textDim, border: "none",
-            borderRadius: 16, padding: 14, fontSize: 13, cursor: "pointer",
-            fontFamily: "'Inter', sans-serif",
-          }}>
-            Ask me later
-          </button>
-        </div>
-
-        {/* Clarity row — demoted */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 0 4px", opacity: 0.7 }}>
-          <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: T.textDim, letterSpacing: "0.14em", textTransform: "uppercase", fontWeight: 600 }}>
-            Clarity of this alert
-          </span>
-          <div style={{ display: "flex", gap: 4 }}>
-            {[1, 2, 3, 4, 5].map((n) => {
-              const active = clarityRating && n <= clarityRating;
-              return (
-                <button key={n} onClick={() => setClarityRating(n)} style={{
-                  width: 24, height: 24, borderRadius: 6,
-                  border: `1px solid ${active ? T.brand : T.border}`,
-                  background: active ? T.brandDim : "transparent",
-                  color: active ? T.brand : T.textDim,
-                  fontSize: 11, fontWeight: 500, cursor: "pointer",
-                  fontFamily: "'JetBrains Mono', monospace",
-                  transition: "all 120ms ease",
-                }}>
-                  {n}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const renderDigest = () => {
-    const week = history.slice(-7);
-    const reviewed = week.reduce((s, d) => s + d.ingested, 0);
-    const escalated = week.reduce((s, d) => s + d.escalated, 0);
-    const confirmed = items.filter((i) => i.clientConfirmed).length;
-    const maxVol = Math.max(...week.map((d) => d.ingested));
-    const weekStart = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toLocaleDateString("en-US", { month: "long", day: "numeric" });
-    const days = ["S", "M", "T", "W", "T", "F", "S"];
-
-    return (
-      <div style={{ animation: "sentry-fade-in 0.4s ease-out" }}>
-        <button onClick={() => goto("status")} style={S.btnBack}>
-          <Icon name="chevronL" size={14} /> Back
-        </button>
-        <div style={{ ...S.digestLabel, marginBottom: 8 }}>Week of {weekStart}</div>
-        <div style={{ fontFamily: "'Fraunces', serif", fontSize: 28, color: T.text, marginBottom: 32, letterSpacing: "-0.01em", lineHeight: 1.1 }}>
-          Your week with VDA
-        </div>
-
-        <div style={{ ...S.card, textAlign: "center", padding: "28px 24px" }}>
-          <div style={S.digestBig}>{reviewed.toLocaleString()}</div>
-          <div style={{ ...S.digestLabel, marginTop: 10 }}>alerts reviewed by VDA</div>
-          <div style={{ ...S.divider, margin: "20px -24px" }} />
-          <div style={S.digestMid}>{escalated}</div>
-          <div style={{ ...S.digestLabel, marginTop: 8 }}>required your attention</div>
-        </div>
-
-        <div style={S.card}>
-          <div style={{ ...S.eyebrow, marginBottom: 16 }}>Daily volume</div>
-          <div style={{ display: "flex", alignItems: "flex-end", gap: 8, height: 60 }}>
-            {week.map((d, i) => (
-              <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+            {/* Attribution row — the trust anchor */}
+            <div style={{
+              marginTop: 32, display: "flex", gap: 16, alignItems: "center",
+              flexWrap: "wrap",
+            }}>
+              <div style={{
+                width: 40, height: 40, borderRadius: "50%",
+                background: T.orangeTint, color: T.orange,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontFamily: T.fontMono, fontSize: 13, fontWeight: 700,
+              }}>{analyst.initials}</div>
+              <div style={{ flex: 1, minWidth: 180 }}>
                 <div style={{
-                  width: "100%", background: T.brand, borderRadius: 3,
-                  height: `${(d.ingested / maxVol) * 100}%`,
-                  minHeight: 2,
-                  opacity: 0.3 + (d.ingested / maxVol) * 0.7,
-                }} />
-                <div style={{ fontSize: 9, color: T.textDim, fontWeight: 600, fontFamily: "'JetBrains Mono', monospace" }}>{days[i]}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div style={{ ...S.card, padding: 24 }}>
-          <div style={{ fontFamily: "'Fraunces', serif", fontSize: 16, color: T.text, lineHeight: 1.6, fontWeight: 400 }}>
-            {confirmed > 0
-              ? `You confirmed ${confirmed} ${confirmed === 1 ? "incident" : "incidents"} this week, each one making the model smarter for your environment.`
-              : "A quiet week."}
-            {escalated === 0 ? " Nothing reached you." : ` ${escalated} ${escalated === 1 ? "item" : "items"} required your input.`}
-            {" "}VDA's analysts handled the rest.
-          </div>
-          <div style={{ marginTop: 16, paddingTop: 16, borderTop: `1px solid ${T.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: T.textDim, letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 600 }}>
-              CISO of record
-            </span>
-            <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 12, color: T.text, fontWeight: 500 }}>
-              {CLIENT.ciso}
-            </span>
-          </div>
-        </div>
-
-        <button onClick={openReport} style={{
-          width: "100%", background: T.brand, color: T.onBrand, border: "none",
-          borderRadius: 14, padding: 16, fontSize: 14, fontWeight: 500,
-          cursor: "pointer", fontFamily: "'Inter', sans-serif",
-          display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-          boxShadow: isDark ? "0 4px 16px rgba(255,87,34,0.3)" : "0 4px 16px rgba(200,62,0,0.3)",
-        }}>
-          <Icon name="file" size={15} /> Open board report
-        </button>
-      </div>
-    );
-  };
-
-  // ==========================================================================
-  // REPORT OVERLAY
-  // ==========================================================================
-  const renderReport = () => {
-    const week = history.slice(-7);
-    const totalReviewed = week.reduce((s, d) => s + d.ingested, 0);
-    const totalEscalated = week.reduce((s, d) => s + d.escalated, 0);
-    const confirmed = items.filter((i) => i.clientConfirmed).length;
-    const noiseReduced = totalReviewed > 0 ? Math.round(((totalReviewed - totalEscalated) / totalReviewed) * 100) : 0;
-    const today = new Date();
-    const period = `Week of ${new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}`;
-    const docId = `VDA-${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, "0")}${String(today.getDate()).padStart(2, "0")}-${CLIENT.name.substring(0, 3).toUpperCase()}`;
-    const maxVol = Math.max(...week.map((d) => d.ingested), 1);
-    const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
-    const takeaway = totalEscalated === 0
-      ? `The week was quiet. VDA handled ${totalReviewed.toLocaleString()} signals without executive involvement. Maintain current posture; no structural changes recommended.`
-      : `VDA surfaced ${totalEscalated} of ${totalReviewed.toLocaleString()} signals for executive review — a ${noiseReduced}% noise reduction. The signal-to-board ratio is healthy; current escalation discipline is working.`;
-
-    return (
-      <div className="sentry-report-overlay" style={{ position: "fixed", inset: 0, zIndex: 100, background: "#1a1a1a", overflow: "auto", animation: "sentry-slide-up 0.35s cubic-bezier(0.32, 0.72, 0, 1)" }}>
-        <div className="sentry-report-toolbar" style={{ position: "sticky", top: 0, zIndex: 50, background: "rgba(20,20,20,0.95)", backdropFilter: "blur(12px)", borderBottom: "1px solid rgba(255,255,255,0.08)", padding: "12px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-          <button onClick={closeReport} style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.15)", color: "#e8e8e8", fontSize: 11, padding: "8px 14px", borderRadius: 8, cursor: "pointer", fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
-            <Icon name="chevronL" size={14} /> Close
-          </button>
-          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: "#999", letterSpacing: "0.2em", textTransform: "uppercase", fontWeight: 600 }}>
-            {docId} · Preview
-          </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={downloadReport} style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.2)", color: "#e8e8e8", fontSize: 12, padding: "8px 14px", borderRadius: 8, cursor: "pointer", fontFamily: "'Inter', sans-serif", fontWeight: 500, display: "flex", alignItems: "center", gap: 6 }}>
-              <Icon name="download" size={13} /> Download
-            </button>
-            <button onClick={() => window.print()} style={{ background: "#c83e00", color: "#fff", border: "none", fontSize: 12, padding: "8px 14px", borderRadius: 8, cursor: "pointer", fontFamily: "'Inter', sans-serif", fontWeight: 500, display: "flex", alignItems: "center", gap: 6 }}>
-              <Icon name="printer" size={13} /> Print / Save as PDF
-            </button>
-          </div>
-        </div>
-
-        <div className="sentry-report-stage" style={{ padding: "32px 20px 60px", background: "#2a2826", minHeight: "calc(100vh - 60px)", display: "flex", flexDirection: "column", alignItems: "center", gap: 24, overflowX: "hidden" }}>
-          <div className="sentry-report-scale-outer" style={{ width: "100%", display: "flex", justifyContent: "center" }}>
-            <div className="sentry-report-scale" style={{ transformOrigin: "top left", width: reportScaledSize.width, height: reportScaledSize.height }}>
-              <div className="sentry-report-scale-inner" style={{ width: 850, transform: `scale(${reportScale})`, transformOrigin: "top left" }}>
-                <div className="sentry-report-pages" style={{ display: "flex", flexDirection: "column", gap: 24, width: 850 }}>
-
-                  {/* COVER */}
-                  <div className="sentry-report-page" style={pageStyle()}>
-                    <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, letterSpacing: "0.3em", textTransform: "uppercase", fontWeight: 600, color: "#8b1a1a" }}>
-                      VDA Labs · Managed Detection & Response
-                    </div>
-                    <div style={{ margin: "auto 0" }}>
-                      <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, letterSpacing: "0.28em", textTransform: "uppercase", color: "#6b6560", marginBottom: 32, fontWeight: 600 }}>
-                        {period} · Confidential Brief
-                      </div>
-                      <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 80, fontWeight: 500, lineHeight: 1.02, letterSpacing: "-0.03em", marginBottom: 24, color: "#1a1a1a" }}>
-                        Security<br />Posture<br />Brief
-                      </div>
-                      <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 22, fontWeight: 400, fontStyle: "italic", color: "#5a5550", lineHeight: 1.35, maxWidth: "5in" }}>
-                        A weekly synthesis of detection activity, analyst decisions, and the threats your team chose not to ignore.
-                      </div>
-                    </div>
-                    <div style={{ paddingTop: 24, borderTop: "2px solid #1a1a1a", display: "flex", justifyContent: "space-between", gap: 16, fontSize: 10 }}>
-                      {[
-                        { lbl: "Prepared for", name: CLIENT.name, sub: "Board of Directors" },
-                        { lbl: "Prepared by", name: "VDA Labs SOC", sub: CLIENT.ciso },
-                        { lbl: "Document", name: docId, sub: today.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }), mono: true, align: "right" },
-                      ].map((c, i) => (
-                        <div key={i} style={{ textAlign: c.align || "left" }}>
-                          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, letterSpacing: "0.2em", textTransform: "uppercase", color: "#8a8580", marginBottom: 5, fontWeight: 700 }}>{c.lbl}</div>
-                          <div style={{ fontFamily: c.mono ? "'JetBrains Mono', monospace" : "'Cormorant Garamond', serif", fontSize: c.mono ? 11 : 15, fontWeight: c.mono ? 600 : 500, marginBottom: 2 }}>{c.name}</div>
-                          <div style={{ color: "#6b6560", fontSize: 10 }}>{c.sub}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* EXEC SUMMARY */}
-                  <div className="sentry-report-page" style={pageStyle()}>
-                    <div style={headRowStyle()}>
-                      <div style={eyebrowStyle()}>I · Executive Summary</div>
-                      <div style={periodStyle()}>{period.toUpperCase()}</div>
-                    </div>
-
-                    {/* THE TAKE */}
-                    <div style={{ background: "#1a1a1a", color: "#fff", padding: "20px 28px", margin: "0 0 26px", display: "flex", gap: 18, alignItems: "center" }}>
-                      <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, letterSpacing: "0.3em", textTransform: "uppercase", color: "#c8a86b", fontWeight: 700, paddingRight: 18, borderRight: "1px solid rgba(255,255,255,0.2)", whiteSpace: "nowrap" }}>
-                        The take
-                      </div>
-                      <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 16, lineHeight: 1.45, color: "#f5f3ee", fontWeight: 500 }}>
-                        {takeaway}
-                      </div>
-                    </div>
-
-                    <h2 style={h2Style()}>The week, in one sentence.</h2>
-                    <p style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 19, lineHeight: 1.5, color: "#3a3530", fontWeight: 400, marginBottom: 28, maxWidth: "6.2in" }}>
-                      VDA's analysts reviewed <strong style={{ color: "#1a1a1a", fontWeight: 600 }}>{totalReviewed.toLocaleString()}</strong> security signals on your behalf this week and surfaced <strong style={{ color: "#1a1a1a", fontWeight: 600 }}>{totalEscalated}</strong> {totalEscalated === 1 ? "item" : "items"} that required executive awareness — a noise reduction of <span style={{ color: "#8b1a1a", fontWeight: 700 }}>{noiseReduced}%</span> against your endpoint and identity surface.
-                    </p>
-
-                    <div style={{ display: "flex", gap: 18, margin: "22px 0 28px" }}>
-                      {[
-                        { num: totalReviewed.toLocaleString(), lbl: "Signals Triaged", sub: "by VDA SOC analysts" },
-                        { num: totalEscalated, lbl: "Escalated", sub: "required your attention" },
-                        { num: `${noiseReduced}%`, lbl: "Noise Filtered", sub: "handled without you" },
-                        { num: confirmed, lbl: "Confirmed True", sub: "model learned from outcomes" },
-                      ].map((m, i) => (
-                        <div key={i} style={{ flex: 1, padding: "14px 0 0", borderTop: "2px solid #1a1a1a" }}>
-                          <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 40, fontWeight: 500, lineHeight: 1, letterSpacing: "-0.025em", color: "#1a1a1a" }}>{m.num}</div>
-                          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8.5, letterSpacing: "0.18em", textTransform: "uppercase", color: "#6b6560", marginTop: 8, fontWeight: 700 }}>{m.lbl}</div>
-                          <div style={{ fontSize: 9.5, color: "#8a8580", marginTop: 3, fontStyle: "italic" }}>{m.sub}</div>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div style={{ ...eyebrowStyle(), marginBottom: 12 }}>Daily Detection Volume</div>
-                    <div style={{ padding: "16px 0", borderTop: "1px solid #d4d0c8", borderBottom: "1px solid #d4d0c8", marginBottom: 22 }}>
-                      <div style={{ display: "flex", alignItems: "flex-end", gap: 14, height: 100, padding: "0 4px" }}>
-                        {week.map((d, i) => (
-                          <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-                            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: "#1a1a1a", fontWeight: 600 }}>{d.ingested}</div>
-                            <div style={{ width: "100%", background: "#8b1a1a", minHeight: 3, height: (d.ingested / maxVol) * 80 }} />
-                            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, letterSpacing: "0.1em", textTransform: "uppercase", color: "#6b6560", fontWeight: 600 }}>{dayNames[i]}</div>
-                          </div>
-                        ))}
-                      </div>
-                      <div style={{ fontSize: 9, color: "#8a8580", fontStyle: "italic", marginTop: 10 }}>
-                        Total signals ingested per day across all monitored surfaces. Triaged automatically by Sentry, escalated by analyst judgment.
-                      </div>
-                    </div>
-
-                    <div style={{ padding: "20px 28px", borderLeft: "3px solid #8b1a1a", background: "#faf8f4", marginTop: 8 }}>
-                      <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 18, fontStyle: "italic", lineHeight: 1.45, color: "#1a1a1a" }}>
-                        "The right number of alerts to escalate to a CEO is the number that demand a decision. This week, that number was {totalEscalated}."
-                      </div>
-                      <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, letterSpacing: "0.18em", textTransform: "uppercase", color: "#6b6560", marginTop: 10, fontWeight: 600 }}>
-                        — {CLIENT.ciso}, VDA Labs
-                      </div>
-                    </div>
-
-                    <div style={footerStyle()}><span>VDA Labs · Confidential</span><span>{CLIENT.name}</span><span>Page 1 of 3</span></div>
-                  </div>
-
-                  {/* FINDINGS */}
-                  <div className="sentry-report-page" style={pageStyle()}>
-                    <div style={headRowStyle()}>
-                      <div style={eyebrowStyle()}>II · Key Findings</div>
-                      <div style={periodStyle()}>{period.toUpperCase()}</div>
-                    </div>
-                    <h2 style={h2Style()}>What we observed.</h2>
-                    <p style={{ fontSize: 11.5, lineHeight: 1.65, color: "#2a2520", marginBottom: 22 }}>
-                      Detection activity was consistent with your established baseline. Three observations are worth surfacing to the board.
-                    </p>
-                    <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-                      <li style={findingStyle()}><strong style={{ fontWeight: 600, color: "#1a1a1a" }}>Phishing campaign targeting finance.</strong> A coordinated credential-harvesting attempt was detected against three members of your finance team. All messages were quarantined before delivery; no clicks recorded. Pattern matches activity attributed to a known commodity threat actor.</li>
-                      <li style={findingStyle()}><strong style={{ fontWeight: 600, color: "#1a1a1a" }}>Routine maintenance executed cleanly.</strong> A scheduled patch on your trading server (SVR-TRADE-07) completed within the maintenance window without incident. Continuity preserved.</li>
-                      <li style={findingStyle()}>
-                        <strong style={{ fontWeight: 600, color: "#1a1a1a" }}>Model precision improving.</strong>{" "}
-                        {confirmed > 0
-                          ? `The ${confirmed} ${confirmed === 1 ? "incident" : "incidents"} you confirmed this week measurably improved how Sentry scores future activity in your environment.`
-                          : "No analyst overrides were required this week — a sign of healthy baseline calibration."}
-                      </li>
-                    </ul>
-
-                    <div style={{ ...eyebrowStyle(), marginTop: 34, marginBottom: 14 }}>III · Recommendations</div>
-                    <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                      <thead>
-                        <tr>
-                          {["Priority", "Action", "Rationale"].map((h, i) => (
-                            <th key={h} style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, letterSpacing: "0.2em", textTransform: "uppercase", textAlign: "left", color: "#8b1a1a", padding: "10px 12px 10px 0", borderBottom: "2px solid #1a1a1a", fontWeight: 700, width: i === 0 ? "20%" : i === 1 ? "42%" : "auto" }}>
-                              {h}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {[
-                          { p: "Immediate", a: "Reinforce phishing awareness for finance team via 15-minute briefing.", r: "Threat actor has demonstrated targeting interest. Repetition reduces susceptibility." },
-                          { p: "This Quarter", a: "Schedule tabletop exercise covering wire-fraud scenario.", r: "Aligns finance, legal, and IT response under a controlled simulation." },
-                          { p: "Ongoing", a: "Maintain current cadence of executive review.", r: "Current escalation volume is healthy. No structural changes recommended." },
-                        ].map((row, i) => (
-                          <tr key={i}>
-                            <td style={{ padding: "14px 12px 14px 0", fontSize: 10.5, borderBottom: "1px solid #e8e4dd", verticalAlign: "top", lineHeight: 1.5, fontWeight: 600, color: "#8b1a1a", whiteSpace: "nowrap" }}>{row.p}</td>
-                            <td style={{ padding: "14px 12px 14px 0", fontSize: 10.5, borderBottom: "1px solid #e8e4dd", verticalAlign: "top", lineHeight: 1.5 }}>{row.a}</td>
-                            <td style={{ padding: "14px 12px 14px 0", fontSize: 10.5, borderBottom: "1px solid #e8e4dd", verticalAlign: "top", lineHeight: 1.5, color: "#5a5550" }}>{row.r}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    <div style={footerStyle()}><span>VDA Labs · Confidential</span><span>{CLIENT.name}</span><span>Page 2 of 3</span></div>
-                  </div>
-
-                  {/* METHODOLOGY */}
-                  <div className="sentry-report-page" style={pageStyle()}>
-                    <div style={headRowStyle()}>
-                      <div style={eyebrowStyle()}>IV · Methodology &amp; Sign-Off</div>
-                      <div style={periodStyle()}>{period.toUpperCase()}</div>
-                    </div>
-                    <h2 style={h2Style()}>How we arrived at these numbers.</h2>
-                    <p style={{ fontSize: 11, lineHeight: 1.7, color: "#2a2520", marginBottom: 14 }}>
-                      Sentry ingests telemetry from your endpoints, identity provider, network gateway, and email security stack. Every signal is scored against MITRE ATT&amp;CK techniques, contextualized against your environment's baseline, and routed through a triage queue staffed by VDA analysts.
-                    </p>
-                    <p style={{ fontSize: 11, lineHeight: 1.7, color: "#2a2520", marginBottom: 14 }}>
-                      Items reach the board only if they pass three filters: technical credibility, business relevance, and executive actionability. Anything that fails one of those filters is handled by the SOC and recorded in your weekly digest — not sent to you.
-                    </p>
-                    <div style={{ ...eyebrowStyle(), marginTop: 28, marginBottom: 10 }}>Confidence Statement</div>
-                    <p style={{ fontSize: 11, lineHeight: 1.7, color: "#2a2520" }}>
-                      This brief reflects telemetry available as of {today.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}. VDA assumes responsibility for the accuracy of detection counts and analyst decisions.
-                    </p>
-                    <div style={{ marginTop: 44, paddingTop: 20, borderTop: "2px solid #1a1a1a", display: "flex", gap: 40 }}>
-                      {[
-                        { lbl: "Prepared By", name: CLIENT.ciso, sub: "VDA Labs · SOC" },
-                        { lbl: "For Review By", name: `${CLIENT.name} Board`, sub: "Quarterly Risk Committee" },
-                      ].map((c, i) => (
-                        <div key={i} style={{ flex: 1 }}>
-                          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, letterSpacing: "0.2em", textTransform: "uppercase", color: "#8a8580", marginBottom: 8, fontWeight: 700 }}>{c.lbl}</div>
-                          <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 18, marginBottom: 4, fontWeight: 500 }}>{c.name}</div>
-                          <div style={{ fontSize: 10, color: "#6b6560" }}>{c.sub}</div>
-                        </div>
-                      ))}
-                    </div>
-                    <div style={footerStyle()}><span>VDA Labs · Confidential</span><span>{CLIENT.name}</span><span>Page 3 of 3</span></div>
-                  </div>
-
+                  fontFamily: T.fontMono, fontSize: 9, letterSpacing: "0.22em",
+                  color: T.inkDarkMuted, fontWeight: 700, textTransform: "uppercase",
+                  marginBottom: 3,
+                }}>Prepared by</div>
+                <div style={{
+                  fontFamily: T.fontBody, fontSize: 14, color: T.inkDark, fontWeight: 600,
+                }}>
+                  {analyst.name}
                 </div>
+                <div style={{
+                  fontFamily: T.fontMono, fontSize: 10, color: T.inkDarkMuted, letterSpacing: "0.08em",
+                }}>{analyst.role} · {generatedAt}</div>
               </div>
             </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
+          </header>
 
-  // ==========================================================================
-  // MAIN RENDER
-  // ==========================================================================
-  return (
-    <div style={{ padding: "20px 12px", minHeight: "100vh" }}>
-      <div style={{ maxWidth: 1100, margin: "0 auto" }}>
-        {/* Header */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, padding: "0 8px", gap: 12 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flex: 1 }}>
-            <div style={{ width: 8, height: 8, borderRadius: "50%", background: T.brand, flexShrink: 0 }} />
-            <div>
-              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, letterSpacing: "0.25em", color: T.brand, textTransform: "uppercase", fontWeight: 700 }}>
-                SENTRY · CLIENT
-              </div>
-              <div style={{ fontFamily: "'Fraunces', serif", fontSize: 13, color: T.text, letterSpacing: "-0.005em", marginTop: 2 }}>
-                {CLIENT.name}
-              </div>
-            </div>
-          </div>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            {["auto", "light", "dark"].map((t) => (
-              <button key={t} onClick={() => setTheme(t)} style={{
-                fontSize: 9, padding: "4px 10px",
-                background: theme === t ? (isDark ? "#222" : "#fff") : "transparent",
-                color: theme === t ? (isDark ? "#fff" : "#000") : (isDark ? "#666" : "#999"),
-                border: `1px solid ${theme === t ? (isDark ? "#333" : "#ddd") : "transparent"}`,
-                borderRadius: 999, textTransform: "uppercase", letterSpacing: "0.18em",
-                cursor: "pointer", fontWeight: 600, fontFamily: "'JetBrains Mono', monospace",
+          {/* ─── THE TAKE — single declarative sentence ─── */}
+          <section style={{ marginBottom: 48 }}>
+            <div style={{
+              background: T.inkDark, color: "#fff", padding: "28px 32px",
+              borderRadius: 4, display: "flex", gap: 20,
+              flexDirection: isMobile ? "column" : "row",
+            }}>
+              <div style={{
+                fontFamily: T.fontMono, fontSize: 10, letterSpacing: "0.32em",
+                color: T.orange, fontWeight: 700, textTransform: "uppercase",
+                paddingRight: isMobile ? 0 : 20,
+                borderRight: isMobile ? "none" : `1px solid rgba(255,255,255,0.15)`,
+                paddingBottom: isMobile ? 8 : 0,
+                borderBottom: isMobile ? `1px solid rgba(255,255,255,0.15)` : "none",
+                flexShrink: 0, whiteSpace: "nowrap",
+              }}>The take</div>
+              <div style={{
+                fontFamily: T.fontDisplay, fontSize: isMobile ? 18 : 20,
+                lineHeight: 1.5, color: "#F5F4F0", fontWeight: 400,
               }}>
-                {t}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Phone */}
-        <div style={{
-          maxWidth: 420, margin: "0 auto",
-          background: T.bg, color: T.text,
-          borderRadius: 44, overflow: "hidden",
-          boxShadow: T.phoneShadow,
-          position: "relative", minHeight: 820,
-          transition: "background 0.4s ease, color 0.4s ease",
-        }}>
-          <div style={{ position: "absolute", top: 12, left: "50%", transform: "translateX(-50%)", width: 120, height: 26, background: "#000", borderRadius: 20, zIndex: 10 }} />
-          {toast && (
-            <div style={{
-              position: "absolute", top: 48, left: 20, right: 20, zIndex: 20,
-              borderRadius: 14, padding: "14px 18px", fontSize: 12,
-              fontFamily: "'Inter', sans-serif", backdropFilter: "blur(8px)",
-              background: isDark ? "rgba(26,46,26,0.95)" : "rgba(232,245,232,0.98)",
-              border: `1px solid ${isDark ? "#2d5a2d" : "#a8d8a8"}`,
-              color: isDark ? "#a8d8a8" : "#2d5a2d",
-              display: "flex", alignItems: "center", gap: 8,
-              animation: "sentry-fade-in 0.4s ease-out",
-            }}>
-              <Icon name="check" size={14} /> {toast}
+                VDA surfaced {openCount + resolved.length} events across your environment this month — {openCount} still need your attention, {resolved.length} resolved.
+                No customer data left your network without authorization. The outstanding case —
+                an unusual sign-in to your CFO's account from Lagos — is under active investigation.
+              </div>
             </div>
-          )}
-          <div style={{ display: "flex", justifyContent: "space-between", padding: "16px 28px 0", fontSize: 11, fontWeight: 600, color: T.text, letterSpacing: "0.05em", fontFamily: "'JetBrains Mono', monospace" }}>
-            <span>{clock || "—"}</span>
-            <span style={{ opacity: 0.5 }}>•••</span>
-          </div>
-          <div style={{ padding: "56px 28px 32px", minHeight: 740 }}>
-            {screen === "status" && renderStatus()}
-            {screen === "active" && renderActive()}
-            {screen === "decision" && renderDecision()}
-            {screen === "digest" && renderDigest()}
-          </div>
-          <div style={{ position: "absolute", bottom: 10, left: "50%", transform: "translateX(-50%)", width: 120, height: 4, background: T.text, opacity: 0.25, borderRadius: 2 }} />
-        </div>
-      </div>
+          </section>
 
-      {reportOpen && renderReport()}
+          {/* ─── MONTH AT A GLANCE ─── */}
+          <section style={{ marginBottom: 56 }}>
+            <h2 style={{
+              fontFamily: T.fontDisplay, fontSize: isMobile ? 22 : 28,
+              color: T.inkDark, fontWeight: 400, marginBottom: 6,
+            }}>Month at a glance</h2>
+            <p style={{
+              fontFamily: T.fontDisplay, fontSize: 15, color: T.inkDarkDim,
+              fontStyle: "italic", marginBottom: 24,
+            }}>Four numbers worth keeping in mind.</p>
+
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr 1fr",
+              gap: 12,
+            }}>
+              {[
+                { n: "18,340", l: "Signals investigated", c: "SNYPR anomalies analyzed", trend: "+12%" },
+                { n: "8", l: "Incidents reported", c: "After SOC review", trend: "-30%" },
+                { n: "124", l: "Phishing blocked", c: "Before they hit inboxes", trend: "+18%" },
+                { n: "99.6%", l: "Signal-to-noise", c: "Routine noise filtered", trend: "steady" },
+              ].map((m) => (
+                <div key={m.l} style={{
+                  padding: 20, background: T.bgLightAlt,
+                  border: `1px solid ${T.dividerLight}`, borderRadius: 4,
+                }}>
+                  <div style={{
+                    fontFamily: T.fontMono, fontSize: 9, letterSpacing: "0.2em",
+                    color: T.inkDarkMuted, fontWeight: 700, textTransform: "uppercase",
+                    marginBottom: 10,
+                  }}>{m.l}</div>
+                  <div style={{
+                    fontFamily: T.fontDisplay, fontSize: 36, color: T.orange,
+                    fontWeight: 400, lineHeight: 1, marginBottom: 6,
+                  }}>{m.n}</div>
+                  <div style={{
+                    fontFamily: T.fontBody, fontSize: 11, color: T.inkDarkDim, lineHeight: 1.4,
+                  }}>{m.c}</div>
+                  <div style={{
+                    marginTop: 10, fontFamily: T.fontMono, fontSize: 10,
+                    color: m.trend.startsWith("-") ? T.slaOk : m.trend === "steady" ? T.inkDarkMuted : T.steel,
+                    fontWeight: 600, letterSpacing: "0.12em",
+                  }}>{m.trend} vs. last month</div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* ─── THE ONE THING THAT MATTERED — narrative deep-dive ─── */}
+          <section style={{ marginBottom: 56 }}>
+            <h2 style={{
+              fontFamily: T.fontDisplay, fontSize: isMobile ? 22 : 28,
+              color: T.inkDark, fontWeight: 400, marginBottom: 6,
+            }}>The one that mattered</h2>
+            <p style={{
+              fontFamily: T.fontDisplay, fontSize: 15, color: T.inkDarkDim,
+              fontStyle: "italic", marginBottom: 24,
+            }}>Out of {openCount + resolved.length} events, this is the one still worth your time.</p>
+
+            <div style={{
+              padding: 26, background: "rgba(210,105,30,0.04)",
+              border: `1px solid rgba(210,105,30,0.22)`,
+              borderLeft: `3px solid ${T.orange}`, borderRadius: 4,
+            }}>
+              <div style={{
+                display: "flex", alignItems: "baseline", gap: 12, marginBottom: 16,
+                flexWrap: "wrap",
+              }}>
+                <span style={{
+                  fontFamily: T.fontMono, fontSize: 10, letterSpacing: "0.2em",
+                  color: T.orange, fontWeight: 700, textTransform: "uppercase",
+                }}>Case {criticalIncident ? criticalIncident.id : "VDA-1847"}</span>
+                <span style={{ color: T.dividerLight }}>·</span>
+                <span style={{
+                  fontFamily: T.fontMono, fontSize: 10, letterSpacing: "0.12em",
+                  color: T.inkDarkMuted,
+                }}>In progress · assigned to Sibe Klomp</span>
+              </div>
+              <h3 style={{
+                fontFamily: T.fontDisplay, fontSize: 22, color: T.inkDark,
+                fontWeight: 500, lineHeight: 1.3, marginBottom: 16,
+              }}>Unusual sign-in to Tom Webb's account from Lagos, Nigeria</h3>
+              <div style={{
+                fontFamily: T.fontBody, fontSize: 15, color: T.inkDark, lineHeight: 1.65,
+              }}>
+                <p style={{ marginBottom: 14 }}>
+                  On April 17 at 14:16 UTC, SNYPR flagged an authentication event from an IP in Lagos
+                  against your CFO's Microsoft 365 identity. The sign-in succeeded, but the session was
+                  isolated within 42 seconds of detection — before any mail was read, any file was
+                  downloaded, or any conditional-access rule was bypassed.
+                </p>
+                <p style={{ marginBottom: 14 }}>
+                  The pattern didn't match Tom's travel history. He's never signed in from Nigeria.
+                  His last recorded location before this event was Denver, four hours earlier. VDA
+                  reached out to your team the same minute we isolated the session, and we're still
+                  waiting on confirmation that Tom isn't traveling — once you confirm, we finalize
+                  remediation (rotate credentials, review any cross-tenant access, rebuild conditional
+                  access rules if needed).
+                </p>
+                <p style={{
+                  padding: "12px 16px", background: "rgba(91,143,111,0.06)",
+                  borderLeft: `2px solid ${T.slaOk}`, marginBottom: 14,
+                  fontStyle: "italic",
+                }}>
+                  What VDA has done already: session isolated, credentials flagged for rotation,
+                  SentinelOne endpoint scan completed (clean), and a timeline of the attacker's
+                  attempted actions preserved for your records.
+                </p>
+                <p>
+                  The ticket thread in your portal has the full timeline. We'll update you the moment
+                  we hear from you, and we don't close this case without your sign-off.
+                </p>
+              </div>
+            </div>
+          </section>
+
+          {/* ─── PATTERNS UNIQUE TO YOU ─── */}
+          <section style={{ marginBottom: 56 }}>
+            <h2 style={{
+              fontFamily: T.fontDisplay, fontSize: isMobile ? 22 : 28,
+              color: T.inkDark, fontWeight: 400, marginBottom: 6,
+            }}>Patterns we only see in your environment</h2>
+            <p style={{
+              fontFamily: T.fontDisplay, fontSize: 15, color: T.inkDarkDim,
+              fontStyle: "italic", marginBottom: 24,
+            }}>Across VDA's 150+ customers, these three things are unique to {THIS_CUSTOMER.name}.</p>
+
+            <div style={{ display: "grid", gap: 14 }}>
+              {[
+                {
+                  title: "Your AP team is the most-targeted team at Acme",
+                  body: "62% of the phishing we blocked this month was addressed to accounts-payable. Across our book of business, AP teams account for roughly 30% of phishing volume — yours is running at twice that. Attackers have identified your team as a high-value target, likely because of the invoice-heavy workflow. We've tuned detection rules specifically for invoice-theme lures on your domain.",
+                },
+                {
+                  title: "Your patch cadence is the fastest in your industry peer set",
+                  body: "Critical patches landed on 98% of your 342 endpoints within 72 hours of vendor release this month. Industry median is 58%. This is a posture strength worth knowing — and worth staying honest about if your team ever considers loosening the policy.",
+                },
+                {
+                  title: "Nobody in Acme has had an identity incident in 14 months — until this week",
+                  body: "The Lagos sign-in is the first identity-targeted event against your organization since February 2025. That's a meaningful streak, and it tells us two things: your MFA enforcement is working, and this attacker is probably worth understanding better. We'll include what we learn in next month's report.",
+                },
+              ].map((p, i) => (
+                <div key={i} style={{
+                  padding: 22, background: T.bgLightAlt,
+                  border: `1px solid ${T.dividerLight}`, borderRadius: 4,
+                }}>
+                  <h4 style={{
+                    fontFamily: T.fontDisplay, fontSize: 18, color: T.inkDark,
+                    fontWeight: 500, lineHeight: 1.3, marginBottom: 10,
+                  }}>{p.title}</h4>
+                  <p style={{
+                    fontFamily: T.fontBody, fontSize: 14, color: T.inkDark,
+                    lineHeight: 1.65,
+                  }}>{p.body}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* ─── WHAT WE BLOCKED ─── */}
+          <section style={{ marginBottom: 56 }}>
+            <h2 style={{
+              fontFamily: T.fontDisplay, fontSize: isMobile ? 22 : 28,
+              color: T.inkDark, fontWeight: 400, marginBottom: 6,
+            }}>What we blocked that you didn't see</h2>
+            <p style={{
+              fontFamily: T.fontDisplay, fontSize: 15, color: T.inkDarkDim,
+              fontStyle: "italic", marginBottom: 24,
+            }}>The invisible work — what didn't reach your team.</p>
+
+            <div style={{
+              display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
+              gap: 12,
+            }}>
+              {[
+                { n: "124", t: "Phishing emails blocked", s: "Before inbox delivery · 58 AP-targeted" },
+                { n: "7", t: "Malicious file uploads stopped", s: "SentinelOne quarantine · 2 ransomware IOCs" },
+                { n: "42", t: "Credential-stuffing attempts", s: "Against your M365 tenant · all blocked" },
+                { n: "3", t: "Risky OAuth app connections", s: "Flagged and denied by policy" },
+              ].map((b) => (
+                <div key={b.t} style={{
+                  display: "flex", alignItems: "flex-start", gap: 14,
+                  padding: 18, background: T.bgLightAlt,
+                  border: `1px solid ${T.dividerLight}`, borderRadius: 4,
+                }}>
+                  <div style={{
+                    width: 36, height: 36, borderRadius: 8,
+                    background: `${T.slaOk}18`, color: T.slaOk,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    flexShrink: 0,
+                  }}><Shield size={17} /></div>
+                  <div>
+                    <div style={{
+                      fontFamily: T.fontDisplay, fontSize: 24, color: T.inkDark,
+                      fontWeight: 500, lineHeight: 1, marginBottom: 4,
+                    }}>{b.n}</div>
+                    <div style={{
+                      fontFamily: T.fontBody, fontSize: 13, color: T.inkDark, fontWeight: 500,
+                    }}>{b.t}</div>
+                    <div style={{
+                      fontFamily: T.fontMono, fontSize: 10, color: T.inkDarkMuted,
+                      letterSpacing: "0.06em", marginTop: 3,
+                    }}>{b.s}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* ─── WHAT'S COMING NEXT MONTH ─── */}
+          <section style={{ marginBottom: 56 }}>
+            <h2 style={{
+              fontFamily: T.fontDisplay, fontSize: isMobile ? 22 : 28,
+              color: T.inkDark, fontWeight: 400, marginBottom: 6,
+            }}>What's coming next month</h2>
+            <p style={{
+              fontFamily: T.fontDisplay, fontSize: 15, color: T.inkDarkDim,
+              fontStyle: "italic", marginBottom: 24,
+            }}>Two small things from our side. One small thing from yours.</p>
+
+            <div style={{ display: "grid", gap: 12 }}>
+              <div style={{
+                padding: "18px 22px", background: T.bgLightAlt,
+                border: `1px solid ${T.dividerLight}`, borderLeft: `3px solid ${T.steel}`,
+                borderRadius: 4,
+              }}>
+                <div style={{
+                  fontFamily: T.fontMono, fontSize: 9, letterSpacing: "0.22em",
+                  color: T.steel, fontWeight: 700, textTransform: "uppercase", marginBottom: 6,
+                }}>FROM US · MAY 6</div>
+                <div style={{ fontFamily: T.fontBody, fontSize: 14, color: T.inkDark, lineHeight: 1.6 }}>
+                  <strong>Detection tuning for invoice-theme phishing.</strong> We're deploying a new signature
+                  set trained on the patterns we saw targeting your AP team in April. No action from you —
+                  this runs inside SNYPR on our side.
+                </div>
+              </div>
+              <div style={{
+                padding: "18px 22px", background: T.bgLightAlt,
+                border: `1px solid ${T.dividerLight}`, borderLeft: `3px solid ${T.steel}`,
+                borderRadius: 4,
+              }}>
+                <div style={{
+                  fontFamily: T.fontMono, fontSize: 9, letterSpacing: "0.22em",
+                  color: T.steel, fontWeight: 700, textTransform: "uppercase", marginBottom: 6,
+                }}>FROM US · MAY 12</div>
+                <div style={{ fontFamily: T.fontBody, fontSize: 14, color: T.inkDark, lineHeight: 1.6 }}>
+                  <strong>Quarterly penetration test kickoff.</strong> Scheduled for Q2 per your contract.
+                  Our team will coordinate scope with {THIS_CUSTOMER.primaryContact.name} the week before.
+                </div>
+              </div>
+              <div style={{
+                padding: "18px 22px", background: "rgba(210,105,30,0.05)",
+                border: `1px solid rgba(210,105,30,0.22)`, borderLeft: `3px solid ${T.orange}`,
+                borderRadius: 4,
+              }}>
+                <div style={{
+                  fontFamily: T.fontMono, fontSize: 9, letterSpacing: "0.22em",
+                  color: T.orange, fontWeight: 700, textTransform: "uppercase", marginBottom: 6,
+                }}>FROM YOU · AS SOON AS YOU CAN</div>
+                <div style={{ fontFamily: T.fontBody, fontSize: 14, color: T.inkDark, lineHeight: 1.6 }}>
+                  <strong>Confirm Tom Webb's travel status.</strong> This is the one piece we need to finalize
+                  the Lagos investigation. The ticket in your portal has a reply button — a one-line answer
+                  unblocks us.
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* ─── ANALYST SIGN-OFF ─── */}
+          <section style={{
+            paddingTop: 32, borderTop: `1px solid ${T.dividerLight}`,
+          }}>
+            <div style={{
+              display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap",
+            }}>
+              <div style={{
+                width: 48, height: 48, borderRadius: "50%",
+                background: T.orangeTint, color: T.orange,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontFamily: T.fontMono, fontSize: 15, fontWeight: 700,
+                flexShrink: 0,
+              }}>{analyst.initials}</div>
+              <div style={{ flex: 1, minWidth: 200 }}>
+                <div style={{
+                  fontFamily: T.fontDisplay, fontSize: 16, color: T.inkDark,
+                  fontStyle: "italic", lineHeight: 1.55, marginBottom: 10,
+                }}>
+                  "Quiet month overall — the Lagos sign-in is the thing that could get louder, so please
+                  ping back when you have a read on Tom. Any questions on what's in here, reply directly
+                  to me."
+                </div>
+                <div style={{
+                  fontFamily: T.fontMono, fontSize: 10, letterSpacing: "0.14em",
+                  color: T.inkDarkMuted, fontWeight: 600, textTransform: "uppercase",
+                }}>— {analyst.name} · {analyst.role}</div>
+              </div>
+            </div>
+
+          </section>
+        </article>
+      </div>
     </div>
   );
-}
+};
 
-// ============================================================================
-// STYLE BUILDERS — reused across screens
-// ============================================================================
-function buildStyles(T) {
-  return {
-    greeting: {
-      fontSize: 10, color: T.textDim, marginBottom: 6,
-      letterSpacing: "0.18em", textTransform: "uppercase",
-      fontWeight: 600, fontFamily: "'JetBrains Mono', monospace",
-    },
-    clientName: {
-      fontFamily: "'Fraunces', serif", fontSize: 26, fontWeight: 400,
-      color: T.text, marginBottom: 32, letterSpacing: "-0.01em",
-    },
-    card: {
-      background: T.surface, border: `1px solid ${T.border}`,
-      borderRadius: 20, padding: 20, marginBottom: 16,
-    },
-    cardLg: { borderRadius: 24, padding: "32px 24px" },
-    statusHeadline: {
-      fontFamily: "'Fraunces', serif", fontSize: 32, fontWeight: 400,
-      color: T.text, marginBottom: 8, letterSpacing: "-0.02em",
-    },
-    statusSub: {
-      fontFamily: "'Inter', sans-serif", fontSize: 14, color: T.textDim,
-      lineHeight: 1.5, maxWidth: 260,
-    },
-    eyebrow: {
-      fontSize: 9, letterSpacing: "0.2em", color: T.textDim,
-      textTransform: "uppercase", fontWeight: 600,
-      fontFamily: "'JetBrains Mono', monospace",
-    },
-    itemBtn: {
-      width: "100%", background: T.surface, border: `1px solid ${T.border}`,
-      borderRadius: 20, padding: 20, marginBottom: 12,
-      textAlign: "left", cursor: "pointer", color: T.text,
-      fontFamily: "inherit", display: "block",
-    },
-    itemTitle: {
-      fontFamily: "'Fraunces', serif", fontSize: 18, color: T.text,
-      marginBottom: 6, lineHeight: 1.3,
-    },
-    itemBody: {
-      fontFamily: "'Inter', sans-serif", fontSize: 13, color: T.textDim,
-      lineHeight: 1.5, marginBottom: 12,
-    },
-    itemMeta: {
-      display: "flex", justifyContent: "space-between",
-      alignItems: "center", fontSize: 11, color: T.textDim,
-    },
-    metaMono: {
-      fontFamily: "'JetBrains Mono', monospace", fontSize: 10,
-      letterSpacing: "0.05em", color: T.textDim,
-    },
-    workingSummary: {
-      width: "100%", background: T.surface, border: `1px solid ${T.border}`,
-      borderRadius: 20, padding: "18px 20px", marginBottom: 20,
-      textAlign: "left", cursor: "pointer", color: T.text,
-      fontFamily: "inherit", display: "flex",
-      justifyContent: "space-between", alignItems: "center",
-    },
-    statBig: {
-      fontFamily: "'Fraunces', serif", fontSize: 32, fontWeight: 400,
-      color: T.text, lineHeight: 1, letterSpacing: "-0.02em",
-    },
-    statLabel: {
-      fontFamily: "'Inter', sans-serif", fontSize: 11,
-      color: T.textDim, marginTop: 6,
-    },
-    divider: { height: 1, background: T.border, margin: "0 -20px 16px" },
-    reportCta: {
-      width: "100%", background: T.brandGrad,
-      border: `1px solid ${T.brandEdge}`, borderLeft: `3px solid ${T.brand}`,
-      borderRadius: 16, padding: 18, cursor: "pointer", color: T.text,
-      fontFamily: "inherit", display: "flex",
-      justifyContent: "space-between", alignItems: "center",
-      boxShadow: "0 4px 16px rgba(200,62,0,0.07)",
-    },
-    reportCtaIcon: {
-      width: 36, height: 36, borderRadius: 10,
-      background: T.brandDim, display: "flex",
-      alignItems: "center", justifyContent: "center", flexShrink: 0,
-    },
-    btnBack: {
-      fontSize: 11, padding: "0 0 24px",
-      display: "flex", alignItems: "center", gap: 6,
-      letterSpacing: "0.1em", textTransform: "uppercase",
-      fontWeight: 600, color: T.textDim,
-      fontFamily: "'JetBrains Mono', monospace",
-      background: "transparent", border: "none", cursor: "pointer",
-    },
-    decisionTitle: {
-      fontFamily: "'Fraunces', serif", fontSize: 26, color: T.text,
-      marginBottom: 16, lineHeight: 1.2, letterSpacing: "-0.01em",
-    },
-    decisionHeadline: {
-      fontFamily: "'Inter', sans-serif", fontSize: 15, color: T.text,
-      lineHeight: 1.6, marginBottom: 24,
-    },
-    contextCard: {
-      background: T.surfaceHi, border: `1px solid ${T.border}`,
-      borderRadius: 16, padding: 18, marginBottom: 16,
-    },
-    cardTitle: {
-      fontFamily: "'Inter', sans-serif", fontSize: 13,
-      color: T.text, lineHeight: 1.6,
-    },
-    digestBig: {
-      fontFamily: "'Fraunces', serif", fontSize: 52, fontWeight: 400,
-      color: T.text, lineHeight: 1, letterSpacing: "-0.03em",
-    },
-    digestMid: {
-      fontFamily: "'Fraunces', serif", fontSize: 32, fontWeight: 400,
-      color: T.statusClear, lineHeight: 1, letterSpacing: "-0.02em",
-    },
-    digestLabel: {
-      fontFamily: "'JetBrains Mono', monospace", fontSize: 10,
-      color: T.textDim, letterSpacing: "0.15em",
-      textTransform: "uppercase", fontWeight: 600,
-    },
-  };
-}
+/* ============================================================
+ * TOAST
+ * ============================================================ */
+const Toast = ({ visible, message }) => (
+  <div style={{
+    position: "fixed", bottom: 20, right: 20, zIndex: 200,
+    background: T.inkDark, color: "#fff", borderRadius: 6,
+    padding: "12px 18px", boxShadow: "0 8px 28px rgba(0,0,0,0.22)",
+    fontFamily: T.fontBody, fontSize: 13, fontWeight: 500,
+    opacity: visible ? 1 : 0,
+    transform: visible ? "translateY(0)" : "translateY(8px)",
+    transition: "all 200ms ease", pointerEvents: visible ? "auto" : "none",
+    display: "flex", alignItems: "center", gap: 10,
+  }}>
+    <Check size={14} style={{ color: T.orange }} />
+    {message}
+  </div>
+);
 
-// Report page style builders
-function pageStyle() {
-  return {
-    background: "#ffffff",
-    width: 850,
-    height: (850 * 11) / 8.5,
-    padding: "0.85in 0.95in 0.7in",
-    boxShadow: "0 12px 40px rgba(0,0,0,0.4)",
-    position: "relative",
-    color: "#1a1a1a",
-    fontFamily: "'Inter', sans-serif",
-    fontSize: 10.5,
-    lineHeight: 1.65,
+/* ============================================================
+ * ROOT APP
+ * ============================================================ */
+
+export default function SentryPortal() {
+  const [phase, setPhase] = useState("p1");
+  const [view, setView] = useState({ name: "home" });
+  const [tickets, setTickets] = useState(CUSTOMER_TICKETS);
+  const [toast, setToast] = useState({ visible: false, message: "" });
+
+  const goHome = () => setView({ name: "home" });
+  const navigate = (viewId) => setView({ name: viewId });
+  const openTicket = (ticketId) => setView({ name: "ticket-detail", ticketId });
+
+  const showToast = (message) => {
+    setToast({ visible: true, message });
+    setTimeout(() => setToast({ visible: false, message: "" }), 2400);
   };
-}
-function headRowStyle() {
-  return {
-    display: "flex", justifyContent: "space-between", alignItems: "baseline",
-    marginBottom: 32, paddingBottom: 10, borderBottom: "2px solid #1a1a1a",
+
+  const handleNewCase = (draft) => {
+    const newId = `VDA-${1900 + tickets.length}`;
+    const newTicket = {
+      id: newId, severity: draft.urgency === "urgent" ? "critical" : draft.urgency === "important" ? "high" : "medium",
+      status: "open", subject: draft.subject,
+      customerFacing: "We've opened this case and an analyst will pick it up shortly.",
+      createdAt: Date.now(), lastUpdate: Date.now(),
+      thread: [{ from: "You", at: Date.now(), body: draft.description }],
+    };
+    setTickets((ts) => [newTicket, ...ts]);
+    showToast(`Case opened · ${newId}`);
+    goHome();
   };
-}
-function eyebrowStyle() {
-  return {
-    fontSize: 9, letterSpacing: "0.25em", textTransform: "uppercase",
-    fontWeight: 700, color: "#8b1a1a",
-    fontFamily: "'JetBrains Mono', monospace",
-  };
-}
-function periodStyle() {
-  return {
-    fontFamily: "'JetBrains Mono', monospace", fontSize: 9,
-    color: "#8a8580", letterSpacing: "0.12em", fontWeight: 500,
-  };
-}
-function h2Style() {
-  return {
-    fontFamily: "'Cormorant Garamond', serif", fontSize: 34, fontWeight: 500,
-    letterSpacing: "-0.015em", marginBottom: 16, color: "#1a1a1a", lineHeight: 1.15,
-  };
-}
-function findingStyle() {
-  return {
-    padding: "16px 0 16px 32px", borderBottom: "1px solid #e8e4dd",
-    position: "relative", fontSize: 11.5, lineHeight: 1.6,
-  };
-}
-function footerStyle() {
-  return {
-    position: "absolute", bottom: "0.5in", left: "0.95in", right: "0.95in",
-    display: "flex", justifyContent: "space-between",
-    fontSize: 8, letterSpacing: "0.12em", textTransform: "uppercase",
-    color: "#8a8580", paddingTop: 8, borderTop: "1px solid #d4d0c8",
-    fontWeight: 600, fontFamily: "'JetBrains Mono', monospace",
-  };
+
+  // Route view
+  let body;
+  if (view.name === "home") {
+    body = <HomeView phase={phase} tickets={tickets} onNavigate={navigate} />;
+  } else if (view.name === "open") {
+    body = <OpenCaseView onBack={goHome} onSubmit={handleNewCase} />;
+  } else if (view.name === "tickets") {
+    body = <TicketsListView tickets={tickets} onBack={goHome} onOpenTicket={openTicket} showToast={showToast} />;
+  } else if (view.name === "ticket-detail") {
+    const ticket = tickets.find((t) => t.id === view.ticketId);
+    if (!ticket) { goHome(); return null; }
+    body = <TicketDetailView ticket={ticket} onBack={() => setView({ name: "tickets" })} />;
+  } else if (view.name === "contract") {
+    body = <ContractView onBack={goHome} />;
+  } else if (view.name === "documents") {
+    body = <DocumentsView onBack={goHome} />;
+  } else if (view.name === "dashboards") {
+    body = <DashboardsView tickets={tickets} onBack={goHome} />;
+  } else if (view.name === "report") {
+    body = <SecurityReportView tickets={tickets} onBack={goHome} />;
+  } else if (view.name === "kb") {
+    body = <KBView onBack={goHome} />;
+  } else if (view.name === "services") {
+    body = <ServicesView onBack={goHome} />;
+  }
+
+  return (
+    <div style={{
+      minHeight: "100vh", background: T.bgLight, color: T.inkDark,
+      fontFamily: T.fontBody,
+    }}>
+      <Header phase={phase} setPhase={setPhase} currentView={view.name} goHome={goHome} />
+      {body}
+      <Toast visible={toast.visible} message={toast.message} />
+    </div>
+  );
 }
