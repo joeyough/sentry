@@ -5,12 +5,12 @@
 
 ## The problem in one sentence
 
-VDA's SOC analysts hand-copy every customer email into Securonix Sniper, and every Sniper alert into email — there's no ticket of record, SLAs are tracked by memory, and wrong-customer data leakage is a recurring incident.
+VDA's SOC analysts hand-copy every customer email into Securonix SNYPR, and every SNYPR alert into email — there's no ticket of record, SLAs are tracked by memory, and wrong-customer data leakage is a recurring incident.
 
 ## The current state
 
 - Halo was abandoned after a 5-month POC consumed 100–200 hours of Jim Blankenship's time and produced nothing usable.
-- Analysts (led by Sibe Klomp, SOC manager) manually copy customer responses from `soc@vdalabs.com` into Sniper incidents, and manually compose outbound notifications by copying incident detail back into fresh emails.
+- Analysts (led by Sibe Klomp, SOC manager) manually copy customer responses from `soc@vdalabs.com` into SNYPR incidents, and manually compose outbound notifications by copying incident detail back into fresh emails.
 - There is no ticket of record. Follow-ups are remembered, not triggered.
 - Mixing one customer's data into another customer's email has happened multiple times. The UI offers no structural prevention.
 - Kendall (VDA leadership) is skeptical this can be fixed without repeating the Halo failure. That skepticism is correct — and the plan is designed around it.
@@ -21,7 +21,7 @@ VDA's SOC analysts hand-copy every customer email into Securonix Sniper, and eve
 A ticketing system and customer portal purpose-built for VDA's SOC workflow. Not a SIEM. Not an XDR. Not a Halo replacement in scope — a narrower, disciplined slice of what Halo was asked to do.
 
 1. **Ticket core** — open, assign, note (internal + external), status, close. Severity field drives SLA clock.
-2. **Sniper bridge (analyst-initiated)** — an analyst triaging in Sniper marks an incident as "open ticket," which fires a Sniper SOAR Python playbook that POSTs the incident payload to the Sentry ticket API. Not every alert becomes a ticket — the analyst decides.
+2. **SNYPR bridge (analyst-initiated)** — an analyst triaging in SNYPR marks an incident as "open ticket," which fires a SNYPR SOAR Python playbook that POSTs the incident payload to the Sentry ticket API. Not every alert becomes a ticket — the analyst decides.
 3. **Email bridge** — inbound listener on `soc@vdalabs.com`. Subject parsing threads replies to existing tickets; unmatched emails become new tickets.
 4. **Wrong-client prevention** — outbound email composer pulls customer context from the incident payload, not free-text. Structurally prevents one customer's data from being sent to another.
 5. **SLA clock** — per-ticket, severity-driven. Surfaces breaches to the analyst queue. Triggers auto-reminders when a customer doesn't respond in X hours.
@@ -30,9 +30,9 @@ A ticketing system and customer portal purpose-built for VDA's SOC workflow. Not
 
 ## What Sentry is not
 
-- **Not a SIEM.** VDA has Sniper. We integrate, we don't compete.
+- **Not a SIEM.** VDA has SNYPR. We integrate, we don't compete.
 - **Not a CRM, quote tool, invoice system, or project manager.** Halo tried to be all of those. Rolled back.
-- **Not a system of record for security telemetry.** VDA's promise to customers is "we don't store your data." Sniper holds the incident detail. The ticket holds the reference and the communication log.
+- **Not a system of record for security telemetry.** VDA's promise to customers is "we don't store your data." SNYPR holds the incident detail. The ticket holds the reference and the communication log.
 - **Not Salesforce, Monday, or Slack.** Those stay. We don't replace them.
 
 ## Who's who
@@ -62,16 +62,20 @@ A ticketing system and customer portal purpose-built for VDA's SOC workflow. Not
 
 ## Integration architecture
 
-### Sniper bridge (Securonix SOAR → ticket API)
+### SNYPR bridge (Securonix SOAR → ticket API)
 
-Securonix Sniper ships with a built-in SOAR capability and Python code blocks in playbooks. The flow:
+**What SNYPR is.** SNYPR is Securonix's security analytics platform — a next-generation SIEM built on Hadoop that combines log management, UEBA (user and entity behavior analytics), case management, and fraud detection. Securonix has been named a Gartner Magic Quadrant Leader for SIEM six years running. VDA uses SNYPR as the primary detection layer across all customer environments. Sibe's SOC team lives in SNYPR eight hours a day — it's where incidents are triaged, correlated, and classified before any customer communication happens.
+
+SNYPR ships with a built-in SOAR capability and Python code blocks inside playbooks. That's the integration hook.
+
+The flow:
 
 ```
-Analyst triages incident in Sniper
+Analyst triages incident in SNYPR
   ↓
 Sets incident state: "open ticket"
   ↓
-Sniper playbook triggering rule fires
+SNYPR playbook triggering rule fires
   ↓
 Python playbook POSTs to Sentry ticket API:
   { incident_id, severity, asset, customer_id, summary }
@@ -100,7 +104,7 @@ Taken from Jim's original Halo requirements list (the "feature floor" — Halo c
 
 - Ticket core with customizable status workflow
 - Tenancy: one customer per ticket, enforced
-- Sniper SOAR bridge (analyst-initiated)
+- SNYPR SOAR bridge (analyst-initiated)
 - Inbound email bridge on `soc@vdalabs.com`
 - Wrong-client prevention on outbound compose
 - SLA clock (severity-driven)
@@ -125,15 +129,15 @@ Taken from Jim's original Halo requirements list (the "feature floor" — Halo c
 - Quotes, invoices, agreements
 - CRM (Salesforce stays)
 - Schedule-a-meeting integration
-- Full XDR / SIEM functionality (Sniper stays)
+- Full XDR / SIEM functionality (SNYPR stays)
 - Project management across non-ticket workstreams (Monday stays)
 
 ## The 20-week plan
 
 | Weeks | Phase | Deliverable |
 |-------|-------|-------------|
-| 1–2 | **Discover** | 13-question discovery doc back from Jim + Sibe. Slack channel live. Walk one live incident end-to-end in Sniper with Sibe. |
-| 3–5 | **MVP Ticketing** | Ticket core + Sniper bridge + email bridge + wrong-client prevention + SLA clock. |
+| 1–2 | **Discover** | 13-question discovery doc back from Jim + Sibe. Slack channel live. Walk one live incident end-to-end in SNYPR with Sibe. |
+| 3–5 | **MVP Ticketing** | Ticket core + SNYPR bridge + email bridge + wrong-client prevention + SLA clock. |
 | 6–8 | **Pilot** | Two pilot customers. Sibe + one other analyst live in the tool daily. Daily Slack feedback. No new features — fix what breaks. |
 | 9–14 | **Portal + Reports** | Customer portal (four views). Templated monthly reports. Roll to remaining 148 customers in waves. |
 | 15–20 | **Adopt** | Named owner inside VDA. Weekly metric review. VDA engineers begin extending the repo independently. |
@@ -153,7 +157,7 @@ Baselines come from sitting with Sibe in weeks 1–2, not from this document.
 ## Next steps
 
 1. **Questionnaire back from Jim + Sibe.** 13 questions, one page each. Delivered to them in the Slack channel.
-2. **Walk one live incident in Sniper with Sibe.** Document every click and copy-paste. This is the workflow the MVP eliminates.
+2. **Walk one live incident in SNYPR with Sibe.** Document every click and copy-paste. This is the workflow the MVP eliminates.
 3. **Lock 5-week build scope in writing, signed by Kendall.** One page. No moving targets after.
 4. **Stand up the Supabase project.** Schema for tickets, customers, analysts, notes, SLA rules.
 5. **Begin week 3 build.**
