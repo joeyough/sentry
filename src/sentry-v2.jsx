@@ -11,10 +11,14 @@
  * with wrong-client prevention (the single most important UX pattern in the app —
  * Jim flagged cross-customer data leakage twice on the discovery call).
  *
- * Scope toggle (top right) lets a viewer see three levels:
- *   L1 · 5-week MVP         — Queue + Detail + Compose only
- *   L2 · Production Feel    — L1 + assign/reassign + SLA breach view + sidebar
- *   L3 · Full SNYPR Flow   — L2 + simulated SNYPR incident panel with "open ticket"
+ * Stage toggle (top right) lets a viewer see three maturity stages:
+ *   Stage 1 · 5-week MVP        — Queue + Detail + Compose only
+ *   Stage 2 · Production Feel    — Stage 1 + assign/reassign + SLA + sidebar
+ *   Stage 3 · Full SNYPR Flow    — Stage 2 + SNYPR ingest simulation view
+ *
+ * Desktop layout is a 2-pane grid (queue + detail). SNYPR panel is a separate
+ * view accessed from the top nav, not a fourth column. Queue Health is a
+ * Phase 2 placeholder visible in the nav but disabled.
  *
  * All data is mocked. Built against the v3 design system:
  *   navy #0A1628, card #122238, edge #1A2E47
@@ -448,13 +452,13 @@ const AnalystAvatar = ({ analyst, size = 28 }) => {
  * HEADER with scope toggle
  * ============================================================ */
 
-const LEVELS = [
-  { id: "L1", label: "5-Week MVP", sub: "Queue · Detail · Compose" },
-  { id: "L2", label: "Production", sub: "+ Assign · SLA breach view" },
-  { id: "L3", label: "Full SNYPR Flow", sub: "+ SNYPR ingest simulation" },
+const STAGES = [
+  { id: "stage1", label: "Stage 1 · 5-Week MVP", short: "Stage 1", sub: "Queue · Detail · Compose" },
+  { id: "stage2", label: "Stage 2 · Production", short: "Stage 2", sub: "+ Assign · SLA · Sidebar" },
+  { id: "stage3", label: "Stage 3 · SNYPR Flow", short: "Stage 3", sub: "+ SNYPR ingest simulation" },
 ];
 
-const Header = ({ level, setLevel }) => {
+const Header = ({ stage, setStage, activeView, setActiveView }) => {
   const isMobile = useIsMobile();
   return (
     <div style={{
@@ -498,6 +502,50 @@ const Header = ({ level, setLevel }) => {
         )}
       </div>
 
+      {/* View nav — Tickets (default) / SNYPR Ingest (stage 3 only) / Queue Health (Phase 2 placeholder) */}
+      {!isMobile && (
+        <div style={{
+          display: "flex", alignItems: "center", gap: 4, marginLeft: 20,
+        }}>
+          <button
+            onClick={() => setActiveView("tickets")}
+            style={{
+              padding: "6px 12px", borderRadius: 3, cursor: "pointer",
+              background: activeView === "tickets" ? "rgba(210,105,30,0.14)" : "transparent",
+              color: activeView === "tickets" ? T.orange : T.inkDim,
+              border: "none",
+              fontFamily: T.fontMono, fontSize: 10, fontWeight: 700,
+              letterSpacing: "0.1em", textTransform: "uppercase",
+            }}
+          >Tickets</button>
+          {stage === "stage3" && (
+            <button
+              onClick={() => setActiveView("snypr")}
+              style={{
+                padding: "6px 12px", borderRadius: 3, cursor: "pointer",
+                background: activeView === "snypr" ? "rgba(210,105,30,0.14)" : "transparent",
+                color: activeView === "snypr" ? T.orange : T.inkDim,
+                border: "none",
+                fontFamily: T.fontMono, fontSize: 10, fontWeight: 700,
+                letterSpacing: "0.1em", textTransform: "uppercase",
+              }}
+            >SNYPR Ingest</button>
+          )}
+          <button
+            disabled
+            title="Queue Health dashboard — Phase 2 placeholder, not yet built"
+            style={{
+              padding: "6px 12px", borderRadius: 3, cursor: "not-allowed",
+              background: "transparent",
+              color: T.inkMuted,
+              border: "none", opacity: 0.5,
+              fontFamily: T.fontMono, fontSize: 10, fontWeight: 700,
+              letterSpacing: "0.1em", textTransform: "uppercase",
+            }}
+          >Queue Health <span style={{ fontSize: 8, marginLeft: 4 }}>· Phase 2</span></button>
+        </div>
+      )}
+
       <div style={{
         display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap",
         justifyContent: isMobile ? "flex-start" : "flex-end",
@@ -505,14 +553,14 @@ const Header = ({ level, setLevel }) => {
         <span style={{
           fontFamily: T.fontMono, fontSize: 9, letterSpacing: "0.2em",
           color: T.inkMuted, textTransform: "uppercase", marginRight: 4,
-        }}>Scope</span>
-        {LEVELS.map((l) => {
-          const active = level === l.id;
+        }}>Stage</span>
+        {STAGES.map((s) => {
+          const active = stage === s.id;
           return (
             <button
-              key={l.id}
-              onClick={() => setLevel(l.id)}
-              title={l.sub}
+              key={s.id}
+              onClick={() => setStage(s.id)}
+              title={s.sub}
               style={{
                 padding: isMobile ? "5px 8px" : "6px 12px",
                 borderRadius: 3, cursor: "pointer",
@@ -524,7 +572,7 @@ const Header = ({ level, setLevel }) => {
                 transition: "all 120ms ease",
               }}
             >
-              {isMobile ? l.id : `${l.id} · ${l.label}`}
+              {isMobile ? s.short : s.label}
             </button>
           );
         })}
@@ -562,7 +610,7 @@ const QueueFilters = ({ filters, setFilters, level, isMobile }) => (
       >{s === "all" ? "ALL" : s.replace("-", " ")}</button>
     ))}
     <div style={{ flex: 1, minWidth: 0 }} />
-    {level !== "L1" && (
+    {level !== "stage1" && (
       <button onClick={() => setFilters({ ...filters, slaBreach: !filters.slaBreach })}
         style={{
           padding: "4px 10px", borderRadius: 3, cursor: "pointer",
@@ -988,7 +1036,7 @@ const TicketDetail = ({ ticket, level, onClose, onCompose, onAssign, isMobile })
             </div>
           </div>
           <div style={{ flex: 1, minWidth: 0 }} />
-          {level !== "L1" && (
+          {level !== "stage1" && (
             <button onClick={onAssign} style={{
               fontFamily: T.fontMono, fontSize: 10, fontWeight: 700, letterSpacing: "0.12em",
               padding: "6px 12px", borderRadius: 3, cursor: "pointer",
@@ -1417,7 +1465,7 @@ const Sidebar = ({ tickets, level }) => {
         </div>
       ))}
 
-      {level === "L3" && (
+      {level === "stage3" && (
         <>
           <div style={{
             fontFamily: T.fontMono, fontSize: 10, letterSpacing: "0.22em",
@@ -1471,7 +1519,8 @@ const Toast = ({ message, visible }) => (
  * ============================================================ */
 
 export default function SentryAnalyst() {
-  const [level, setLevel] = useState("L2");
+  const [stage, setStage] = useState("stage2");
+  const [activeView, setActiveView] = useState("tickets"); // "tickets" | "snypr"
   const [tickets, setTickets] = useState(TICKETS);
   const [backlog, setBacklog] = useState(SNYPR_BACKLOG);
   const [selectedId, setSelectedId] = useState(TICKETS[0].id);
@@ -1551,10 +1600,10 @@ export default function SentryAnalyst() {
     }
   }, [tickets, selectedId]);
 
-  // Reset mobile pane if level changes away from L3 while viewing snypr
+  // Reset mobile pane if stage changes away from stage3 while viewing snypr
   useEffect(() => {
-    if (level !== "L3" && mobilePane === "snypr") setMobilePane("queue");
-  }, [level, mobilePane]);
+    if (stage !== "stage3" && mobilePane === "snypr") setMobilePane("queue");
+  }, [stage, mobilePane]);
 
   const onOpenTicket = (t) => {
     setSelectedId(t.id);
@@ -1573,14 +1622,14 @@ export default function SentryAnalyst() {
         fontFamily: T.fontBody, fontSize: 14,
       }}>
         <style>{pulse}</style>
-        <Header level={level} setLevel={setLevel} />
+        <Header stage={stage} setStage={setStage} activeView={activeView} setActiveView={setActiveView} />
 
-        {/* Mobile pane nav — only show SNYPR tab at L3 */}
+        {/* Mobile pane nav — only show SNYPR tab at Stage 3 */}
         <div style={{
           display: "flex", borderBottom: `1px solid ${T.divider}`, background: T.bg,
           position: "sticky", top: 0, zIndex: 5,
         }}>
-          {level === "L3" && (
+          {stage === "stage3" && (
             <button onClick={() => setMobilePane("snypr")} style={{
               flex: 1, padding: "12px 8px", cursor: "pointer",
               background: mobilePane === "snypr" ? T.bgCard : "transparent",
@@ -1621,7 +1670,7 @@ export default function SentryAnalyst() {
         </div>
 
         {/* Pane content */}
-        {mobilePane === "snypr" && level === "L3" && (
+        {mobilePane === "snypr" && stage === "stage3" && (
           <div style={{ padding: 14 }}>
             <SnyprPanel backlog={backlog} onOpenTicket={handleOpenFromSnypr} isMobile={isMobile} />
           </div>
@@ -1630,7 +1679,7 @@ export default function SentryAnalyst() {
           <div style={{ minHeight: "calc(100vh - 170px)" }}>
             <QueueView
               tickets={tickets} filters={filters} setFilters={setFilters}
-              onOpen={onOpenTicket} selectedId={selectedId} level={level} isMobile={isMobile}
+              onOpen={onOpenTicket} selectedId={selectedId} level={stage} isMobile={isMobile}
               onQuickAssign={handleQuickAssignToMe}
               onQuickResolve={handleQuickResolve}
             />
@@ -1639,7 +1688,7 @@ export default function SentryAnalyst() {
         {mobilePane === "detail" && selectedTicket && (
           <div style={{ minHeight: "calc(100vh - 170px)" }}>
             <TicketDetail
-              ticket={selectedTicket} level={level} isMobile={isMobile}
+              ticket={selectedTicket} level={stage} isMobile={isMobile}
               onClose={() => setMobilePane("queue")}
               onCompose={() => setComposeOpen(true)}
               onAssign={() => setAssignOpen(true)}
@@ -1673,45 +1722,72 @@ export default function SentryAnalyst() {
       fontFamily: T.fontBody, fontSize: 14,
     }}>
       <style>{pulse}</style>
-      <Header level={level} setLevel={setLevel} />
+      <Header stage={stage} setStage={setStage} activeView={activeView} setActiveView={setActiveView} />
 
-      <div style={{
-        display: "grid",
-        gridTemplateColumns: level === "L3"
-          ? "320px minmax(400px, 1fr) minmax(440px, 1fr) 260px"
-          : level === "L2"
-          ? "minmax(520px, 1fr) minmax(440px, 1fr) 260px"
-          : "minmax(520px, 1fr) minmax(440px, 1fr)",
-        height: "calc(100vh - 57px)",
-      }}>
-        {level === "L3" && (
-          <div style={{ overflowY: "auto", padding: 20, borderRight: `1px solid ${T.divider}` }}>
-            <SnyprPanel backlog={backlog} onOpenTicket={handleOpenFromSnypr} isMobile={false} />
+      {/* SNYPR Ingest view — full-screen separate view on desktop */}
+      {activeView === "snypr" && stage === "stage3" && (
+        <div style={{
+          height: "calc(100vh - 57px)", overflowY: "auto",
+          padding: "20px 24px", maxWidth: 900, margin: "0 auto", width: "100%",
+        }}>
+          <div style={{
+            fontFamily: T.fontMono, fontSize: 10, letterSpacing: "0.2em",
+            color: T.orange, fontWeight: 700, textTransform: "uppercase",
+            marginBottom: 8,
+          }}>STAGE 3 · SNYPR Ingest Simulation</div>
+          <div style={{
+            fontFamily: T.fontBody, fontSize: 14, color: T.inkDim, marginBottom: 20, lineHeight: 1.5,
+          }}>
+            Demo view of how SNYPR incidents appear in the bridge before an analyst opens a ticket.
+            In production, Sibe's team writes the SOAR playbook on the SNYPR side; Sentry receives the webhook.
           </div>
-        )}
-
-        <div style={{ overflowY: "auto", borderRight: `1px solid ${T.divider}` }}>
-          <QueueView
-            tickets={tickets} filters={filters} setFilters={setFilters}
-            onOpen={onOpenTicket} selectedId={selectedId} level={level} isMobile={false}
-            onQuickAssign={handleQuickAssignToMe}
-            onQuickResolve={handleQuickResolve}
-          />
+          <SnyprPanel backlog={backlog} onOpenTicket={(inc) => {
+            handleOpenFromSnypr(inc);
+            setActiveView("tickets");
+          }} isMobile={false} />
         </div>
+      )}
 
-        <div style={{ overflow: "hidden" }}>
-          {selectedTicket && (
-            <TicketDetail
-              ticket={selectedTicket} level={level} isMobile={false}
-              onClose={() => setSelectedId(null)}
-              onCompose={() => setComposeOpen(true)}
-              onAssign={() => setAssignOpen(true)}
+      {/* Tickets view — 2-pane on desktop (queue + detail) */}
+      {activeView === "tickets" && (
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(380px, 480px) 1fr",
+          height: "calc(100vh - 57px)",
+        }}>
+          <div style={{ overflowY: "auto", borderRight: `1px solid ${T.divider}` }}>
+            <QueueView
+              tickets={tickets} filters={filters} setFilters={setFilters}
+              onOpen={onOpenTicket} selectedId={selectedId} level={stage} isMobile={false}
+              onQuickAssign={handleQuickAssignToMe}
+              onQuickResolve={handleQuickResolve}
             />
-          )}
-        </div>
+          </div>
 
-        {level !== "L1" && <Sidebar tickets={tickets} level={level} />}
-      </div>
+          <div style={{ overflow: "hidden", position: "relative" }}>
+            {selectedTicket && (
+              <TicketDetail
+                ticket={selectedTicket} level={stage} isMobile={false}
+                onClose={() => setSelectedId(null)}
+                onCompose={() => setComposeOpen(true)}
+                onAssign={() => setAssignOpen(true)}
+              />
+            )}
+            {/* Stage 2+ sidebar is now a slide-in drawer on the right, dismissible */}
+            {stage !== "stage1" && selectedTicket && (
+              <div style={{
+                position: "absolute", right: 0, top: 0, bottom: 0,
+                width: 260, background: T.bg,
+                borderLeft: `1px solid ${T.divider}`,
+                overflowY: "auto",
+                display: window.innerWidth > 1200 ? "block" : "none",
+              }}>
+                <Sidebar tickets={tickets} level={stage} />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {composeOpen && selectedTicket && (
         <ComposeModal
