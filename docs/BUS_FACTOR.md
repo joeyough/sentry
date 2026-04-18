@@ -4,7 +4,7 @@ If the original builder gets hit by a bus, this is the file you read first. It e
 
 ## Architecture (one paragraph)
 
-A React + Vite single-page app (two routes: `/` analyst UI, `/portal` customer-facing) backed by Supabase for ticket storage, auth, and row-level tenant isolation. Integration with VDA's Securonix Sniper SIEM happens via a Python SOAR playbook that POSTs incident payloads to the Sentry ticket API on analyst-initiated state change. Inbound customer email to `soc@vdalabs.com` is routed through a webhook listener that creates or threads tickets. The goal of every decision in this repo is: **make the daily copy-paste that runs Sibe's SOC workflow go away, and make it never come back.**
+A React + Vite single-page app (two routes: `/` analyst UI, `/portal` customer-facing) backed by Supabase for ticket storage, auth, and row-level tenant isolation. Integration with VDA's Securonix SNYPR SIEM happens via a Python SOAR playbook that POSTs incident payloads to the Sentry ticket API on analyst-initiated state change. Inbound customer email to `soc@vdalabs.com` is routed through a webhook listener that creates or threads tickets. The goal of every decision in this repo is: **make the daily copy-paste that runs Sibe's SOC workflow go away, and make it never come back.**
 
 ## Dependencies (complete list)
 
@@ -27,7 +27,7 @@ Seven dependencies. All mainstream. No exotic libraries. A junior React dev can 
 | Single-file React components | Eliminates build complexity, easier handoff | `src/*.jsx` |
 | Inline styles over Tailwind arbitrary values | Works in any build environment; no JIT compile edge cases | all JSX files |
 | Supabase row-level security for tenancy | Customer A structurally cannot see customer B's tickets. Enforced at the database, not the UI. | Supabase RLS policies |
-| Analyst-initiated Sniper ingress (not auto) | Sibe explicitly rejected "every alert becomes a ticket." Too much noise. | Sniper SOAR Python playbook |
+| Analyst-initiated SNYPR ingress (not auto) | Sibe explicitly rejected "every alert becomes a ticket." Too much noise. | SNYPR SOAR Python playbook |
 | Severity-driven SLA clock | Matches VDA's 1-hour critical SLA commitment to customers | `sla_rules` table + clock service |
 | Wrong-client prevention via incident-bound context | Outbound email composer cannot mix customer data. The compose UI pulls customer from the ticket, not from a free-text field. | Analyst UI compose flow |
 | Magic-link auth for customers | No password management burden on VDA, no password leaks in customer support tickets | Supabase magic-link auth |
@@ -41,8 +41,8 @@ Seven dependencies. All mainstream. No exotic libraries. A junior React dev can 
 customers         → id, name, domain, contract_tier, created_at
 analysts          → id, email (google sso), name, role
 tickets           → id, customer_id, assigned_analyst_id, status,
-                    severity, source ('sniper' | 'email' | 'manual'),
-                    sniper_incident_id, subject, created_at, updated_at,
+                    severity, source ('snypr' | 'email' | 'manual'),
+                    snypr_incident_id, subject, created_at, updated_at,
                     sla_due_at, last_customer_response_at
 ticket_notes      → id, ticket_id, author_id, author_type ('analyst'|'customer'),
                     body, internal (bool), created_at
@@ -54,30 +54,32 @@ email_templates   → id, name, subject_tmpl, body_tmpl, variables (jsonb)
 
 All timestamps UTC. All IDs UUIDs. Row-level security enforces `customer_id` filtering on every portal query.
 
-## Integration: Sniper bridge
+## Integration: SNYPR bridge
 
-The Securonix Sniper (SNYPR) SIEM ships with a built-in SOAR capability and Python code blocks inside playbooks. The bridge is a single Python playbook attached to a state-change rule:
+**What SNYPR is.** SNYPR is Securonix's security analytics platform — next-gen SIEM + UEBA + case management, running natively on Hadoop, with machine-learning-based anomaly detection. It's Gartner MQ Leader for SIEM (six consecutive years as of 2025). VDA uses SNYPR as its primary customer-monitoring platform — where incidents are detected and triaged before any customer communication exists.
+
+The integration hook is SNYPR's built-in SOAR capability, which supports Python code blocks inside playbooks. The bridge is a single Python playbook attached to a state-change rule:
 
 ```python
-# Sniper SOAR playbook — analyst-initiated ticket creation
+# SNYPR SOAR playbook — analyst-initiated ticket creation
 # Trigger: incident state transitions to "open ticket"
 
 def on_state_change(incident):
     payload = {
-        "sniper_incident_id": incident.id,
+        "snypr_incident_id": incident.id,
         "severity": incident.severity,
         "asset": incident.asset,
         "customer_id": incident.customer_mapping,
         "summary": incident.summary,
         "triggering_analyst": incident.current_assignee,
     }
-    post("https://sentry-vda.netlify.app/api/ingest/sniper", payload,
-         headers={"X-Sniper-Secret": SECRET})
+    post("https://sentry-vda.netlify.app/api/ingest/snypr", payload,
+         headers={"X-SNYPR-Secret": SECRET})
 ```
 
 The endpoint lives as a Netlify edge function (or Supabase edge function — TBD based on where Sibe's team wants the secret to live). It validates the secret, looks up the `customer_id`, and inserts a `tickets` row. The analyst sees the new ticket in the Sentry UI seconds later.
 
-**Why analyst-initiated, not automatic**: every Sniper alert becoming a ticket = noise Sibe's team already rejected. The analyst triages in Sniper first; only incidents that need customer communication become tickets.
+**Why analyst-initiated, not automatic**: every SNYPR alert becoming a ticket = noise Sibe's team already rejected. The analyst triages in SNYPR first; only incidents that need customer communication become tickets.
 
 ## Integration: Email bridge
 
@@ -93,7 +95,7 @@ Every email (inbound and outbound) is logged in `email_events`. The ticket view 
 
 1. **Supabase project stood up** — schema above, RLS policies, magic-link email auth.
 2. **Google Workspace SSO configured** — requires Kendall to grant Workspace admin access.
-3. **Sniper SOAR playbook written and tested** — Sibe's team has an existing dev/staging Sniper instance.
+3. **SNYPR SOAR playbook written and tested** — Sibe's team has an existing dev/staging SNYPR instance.
 4. **Email routing configured** — `soc@vdalabs.com` webhook target.
 5. **Analyst UI build** — queue, compose (with wrong-client prevention), notes, SLA display.
 6. **Template library seeded** — outbound email templates pre-loaded from what VDA sends today.
@@ -113,7 +115,7 @@ Every email (inbound and outbound) is logged in `email_events`. The ticket view 
 | `VITE_SUPABASE_URL` | Netlify env, client-safe | Public URL |
 | `VITE_SUPABASE_ANON_KEY` | Netlify env, client-safe | Anon key; RLS enforces safety |
 | `SUPABASE_SERVICE_ROLE` | Netlify edge function env only | Never exposed to client |
-| `SNIPER_WEBHOOK_SECRET` | Netlify edge function env + Sniper playbook config | Shared secret for POST validation |
+| `SNYPR_WEBHOOK_SECRET` | Netlify edge function env + SNYPR playbook config | Shared secret for POST validation |
 | `EMAIL_WEBHOOK_SECRET` | Netlify edge function env + email provider config | Shared secret for inbound email |
 
 No OAuth tokens stored. No customer passwords stored (magic link only).
@@ -136,7 +138,7 @@ sentry/
 ├── public/
 │   └── sentry-design-system-v3.html   ← standalone design system reference
 ├── api/                         ← Netlify edge functions
-│   ├── ingest-sniper.js
+│   ├── ingest-snypr.js
 │   ├── ingest-email.js
 │   └── sla-tick.js
 ├── supabase/
@@ -166,6 +168,6 @@ The strategic deck is `VDA_SecOps_Plan_v4.pptx`, 16 slides. It operates at the d
 
 A new engineer joining the project should be able to answer this in 30 seconds after reading this file:
 
-> *"Build the ticketing layer that replaces Sibe's manual email ↔ Sniper copy-paste, with wrong-client prevention on the compose flow, in 5 weeks — and don't let scope grow into what Halo tried to be."*
+> *"Build the ticketing layer that replaces Sibe's manual email ↔ SNYPR copy-paste, with wrong-client prevention on the compose flow, in 5 weeks — and don't let scope grow into what Halo tried to be."*
 
 If they can't answer that, this file isn't doing its job. Update it until they can.
