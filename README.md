@@ -2,7 +2,7 @@
 
 A focused ticketing system and customer portal for VDA Labs' SOC team. Built to replace the manual email ↔ SIM copy-paste that runs Sibe's daily workflow today.
 
-Built by 3Nails Infosec. VDA owns the repo, the deployment, the data, and the extension path from day one.
+Built by 3Nails Infosec. VDA operates the deployment and controls its operational data throughout. No vendor lock-in — the tool survives if 3Nails disappears. Commercial structure is flexible and shaped together.
 
 ## What this is (and what it isn't)
 
@@ -151,7 +151,7 @@ If Sibe's copy-paste count isn't zero by week 5 on the two pilot accounts, the s
 - **Weeks 3–5:** Build the MVP. Ticket core, SNYPR bridge, email bridge, wrong-client prevention, SLA clock.
 - **Weeks 6–8:** Two pilot customers. Daily feedback. No new features — fix what breaks.
 - **Weeks 9–14:** Customer portal ships. Templated monthly customer reports. Roll to remaining 148 customers in waves.
-- **Weeks 15–20:** Named owner inside VDA. Weekly metric review. VDA engineers begin extending.
+- **Weeks 15–20:** Named operational owner inside VDA. Weekly metric review. VDA engineers can extend the system as licensing allows.
 
 Halo's failure mode was the absence of an adoption plan. This has one: Sibe is in the tool from day one, Slack is the feedback loop, weekly metric reviews are non-negotiable.
 
@@ -170,7 +170,7 @@ Connected to Netlify via `netlify.toml`. Auto-deploys on push to `main`.
 | Sold white-glove, delivered homework | Joey + Vincent do the work; Jim's hours are for decisions only |
 | Scope grew into CRM + PM + quoting | Scope is ticketing only. Phase 2 features live in a separate doc. |
 | No product owner inside VDA | Jim is the product owner. Sibe is the daily user. Both are in Slack. |
-| Vendor-hosted, vendor-controlled | VDA owns the repo, the database, the deployment. Zero lock-in. |
+| Vendor-hosted, vendor-controlled | VDA operates the deployment and controls its operational data. No vendor lock-in. Commercial structure is flexible and shaped together. |
 | Built against a pitch deck | Built against Sibe's actual daily workflow |
 | 5 months of configuration | 5 weeks to working MVP, or we stop and diagnose |
 
