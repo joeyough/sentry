@@ -56,7 +56,7 @@ A ticketing system and customer portal purpose-built for VDA's SOC workflow. Not
 
 - **Sibe is the user, not Jim.** Sibe is in the tool from day one. Every screen is shaped against his daily workflow. Jim's hours are for decisions, not configuration.
 - **Scope is ticketing only for 5 weeks.** Portal and reports are Phase 2 (weeks 9–14). Anything else moves to a separate Phase 3 doc.
-- **VDA owns the repo, the database, the deployment.** React + Vite + Supabase. Junior-readable. No vendor lock-in. The tool survives if 3Nails disappears.
+- **VDA operates the deployment and controls its operational data.** React + Vite + Supabase. Junior-readable. No vendor lock-in. The tool survives if 3Nails disappears. Commercial structure is flexible and shaped together, not pre-committed in the deck.
 - **Async-first delivery.** Slack channel with Joey, Vincent, Jim, Sibe. Weekly metric review. No six-month silence before a demo.
 - **Every phase has a kill switch.** If Sibe's copy-paste count isn't zero by week 5 on the two pilot accounts, we stop and diagnose before adding scope.
 
@@ -140,7 +140,7 @@ Taken from Jim's original Halo requirements list (the "feature floor" — Halo c
 | 3–5 | **MVP Ticketing** | Ticket core + SNYPR bridge + email bridge + wrong-client prevention + SLA clock. |
 | 6–8 | **Pilot** | Two pilot customers. Sibe + one other analyst live in the tool daily. Daily Slack feedback. No new features — fix what breaks. |
 | 9–14 | **Portal + Reports** | Customer portal (four views). Templated monthly reports. Roll to remaining 148 customers in waves. |
-| 15–20 | **Adopt** | Named owner inside VDA. Weekly metric review. VDA engineers begin extending the repo independently. |
+| 15–20 | **Adopt** | Named operational owner inside VDA. Weekly metric review. VDA engineers can extend the system as licensing allows. |
 
 ## Measurement (deck slide 10 + 16)
 
