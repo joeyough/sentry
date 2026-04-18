@@ -5,7 +5,8 @@
  * discovery call with Jim, Sibe, Kendall, and Vincent.
  *
  * Purpose: eliminate the manual copy-paste workflow between Securonix SNYPR and
- * outbound email that runs Sibe's day. Replaces what Halo tried and failed to do.
+ * outbound email (inbound address: soc@vdalabs.com) that runs Sibe's day.
+ * Replaces what Halo tried and failed to do.
  *
  * Core surface: ticket queue, ticket detail view with email thread, compose flow
  * with wrong-client prevention (the single most important UX pattern in the app —
@@ -466,85 +467,70 @@ const Header = ({ stage, setStage, activeView, setActiveView }) => {
       display: "flex",
       flexDirection: isMobile ? "column" : "row",
       alignItems: isMobile ? "stretch" : "center",
-      justifyContent: "flex-start",
-      gap: isMobile ? 10 : 16,
-      padding: isMobile ? "12px 14px" : "14px 24px",
+      gap: isMobile ? 8 : 0,
+      padding: isMobile ? "10px 14px" : "0 20px",
+      height: isMobile ? "auto" : 48,
       background: T.bg,
-      borderBottom: `1px solid ${T.divider}`, position: "sticky", top: 0, zIndex: 10,
+      borderBottom: `1px solid ${T.divider}`,
     }}>
+      {/* Left: brand lockup — slim and quiet */}
       <div style={{
-        display: "flex", alignItems: "center", gap: 12, flexShrink: 0,
+        display: "flex", alignItems: "center", gap: 10, flexShrink: 0,
       }}>
         <div style={{
-          width: 28, height: 28, borderRadius: 4,
-          background: "rgba(210,105,30,0.14)",
-          border: `1px solid rgba(210,105,30,0.35)`,
+          width: 22, height: 22, borderRadius: 3,
+          background: "rgba(210,105,30,0.12)",
           display: "flex", alignItems: "center", justifyContent: "center", color: T.orange,
           flexShrink: 0,
         }}>
-          <Shield size={15} />
+          <Shield size={13} />
         </div>
         <div style={{
-          fontFamily: T.fontMono, fontSize: 11, letterSpacing: "0.22em",
+          fontFamily: T.fontMono, fontSize: 10, letterSpacing: "0.22em",
           fontWeight: 700, color: T.ink, textTransform: "uppercase",
         }}>
-          SENTRY · <span style={{ color: T.inkMuted }}>analyst</span>
+          SENTRY
         </div>
         {!isMobile && (
-          <>
-            <div style={{ color: T.divider }}>|</div>
-            <div style={{
-              fontFamily: T.fontMono, fontSize: 10, letterSpacing: "0.15em",
-              color: T.inkMuted, textTransform: "uppercase",
-            }}>
-              VDA × 3NAILS
-            </div>
-          </>
+          <div style={{
+            fontFamily: T.fontMono, fontSize: 9, letterSpacing: "0.16em",
+            color: T.inkMuted, textTransform: "uppercase", marginLeft: 2,
+          }}>
+            VDA × 3NAILS
+          </div>
         )}
       </div>
 
-      {/* View nav — Tickets (default) / SNYPR Ingest (stage 3 only) */}
+      {/* Middle: workflow nav — the primary affordance */}
       {!isMobile && (
         <div style={{
-          display: "flex", alignItems: "center", gap: 4, marginLeft: 0, flex: 1, minWidth: 0, justifyContent: "center",
+          display: "flex", alignItems: "center", gap: 0, marginLeft: 32,
+          height: "100%", flex: 1, minWidth: 0,
         }}>
-          <button
+          <HeaderNavButton
+            label="Tickets"
+            active={activeView === "tickets"}
             onClick={() => setActiveView("tickets")}
-            style={{
-              padding: "6px 12px", borderRadius: 3, cursor: "pointer",
-              background: activeView === "tickets" ? "rgba(210,105,30,0.14)" : "transparent",
-              color: activeView === "tickets" ? T.orange : T.inkDim,
-              border: "none",
-              fontFamily: T.fontMono, fontSize: 10, fontWeight: 700,
-              letterSpacing: "0.1em", textTransform: "uppercase",
-            }}
-          >Tickets</button>
+          />
           {stage === "stage3" && (
-            <button
+            <HeaderNavButton
+              label="SNYPR Ingest"
+              active={activeView === "snypr"}
               onClick={() => setActiveView("snypr")}
-              style={{
-                padding: "6px 12px", borderRadius: 3, cursor: "pointer",
-                background: activeView === "snypr" ? "rgba(210,105,30,0.14)" : "transparent",
-                color: activeView === "snypr" ? T.orange : T.inkDim,
-                border: "none",
-                fontFamily: T.fontMono, fontSize: 10, fontWeight: 700,
-                letterSpacing: "0.1em", textTransform: "uppercase",
-              }}
-            >SNYPR Ingest</button>
+            />
           )}
-          {/* Queue Health placeholder removed — was operationally dead in header chrome.
-              Phase 2 dashboard asks still documented in SCOPE_AUDIT.md. */}
         </div>
       )}
 
+      {/* Right: Stage demo toggle — visually demoted */}
       <div style={{
         display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap",
         justifyContent: isMobile ? "flex-start" : "flex-end", flexShrink: 0,
       }}>
         <span style={{
-          fontFamily: T.fontMono, fontSize: 8, letterSpacing: "0.18em",
-          color: T.inkMuted, textTransform: "uppercase", marginRight: 2, opacity: 0.75,
-        }}>Demo</span>
+          fontFamily: T.fontMono, fontSize: 8, letterSpacing: "0.2em",
+          color: T.inkMuted, textTransform: "uppercase", marginRight: 4, opacity: 0.7,
+        }}>demo view</span>
         {STAGES.map((s) => {
           const active = stage === s.id;
           return (
@@ -553,13 +539,13 @@ const Header = ({ stage, setStage, activeView, setActiveView }) => {
               onClick={() => setStage(s.id)}
               title={s.sub}
               style={{
-                padding: isMobile ? "5px 8px" : "6px 12px",
+                padding: isMobile ? "4px 8px" : "4px 10px",
                 borderRadius: 3, cursor: "pointer",
-                background: active ? "rgba(210,105,30,0.14)" : "transparent",
-                color: active ? T.orange : T.inkDim,
-                border: `1px solid ${active ? T.orange : T.divider}`,
-                fontFamily: T.fontMono, fontSize: isMobile ? 9 : 10, fontWeight: 700,
-                letterSpacing: "0.1em", textTransform: "uppercase",
+                background: active ? "rgba(210,105,30,0.12)" : "transparent",
+                color: active ? T.orange : T.inkMuted,
+                border: `1px solid ${active ? "rgba(210,105,30,0.5)" : "transparent"}`,
+                fontFamily: T.fontMono, fontSize: 9, fontWeight: 700,
+                letterSpacing: "0.12em", textTransform: "uppercase",
                 transition: "all 120ms ease",
               }}
             >
@@ -571,6 +557,26 @@ const Header = ({ stage, setStage, activeView, setActiveView }) => {
     </div>
   );
 };
+
+/* Workflow nav button — uses underline active state like a real app nav, not a chip */
+const HeaderNavButton = ({ label, active, onClick }) => (
+  <button
+    onClick={onClick}
+    style={{
+      height: "100%", padding: "0 16px", cursor: "pointer",
+      background: "transparent",
+      color: active ? T.ink : T.inkMuted,
+      border: "none",
+      borderBottom: `2px solid ${active ? T.orange : "transparent"}`,
+      fontFamily: T.fontBody, fontSize: 13, fontWeight: 600,
+      letterSpacing: "0.02em",
+      transition: "all 120ms ease",
+      display: "flex", alignItems: "center",
+    }}
+  >
+    {label}
+  </button>
+);
 
 /* ============================================================
  * QUEUE VIEW (all levels)
@@ -968,6 +974,26 @@ const EventRow = ({ event }) => {
   );
 };
 
+/* Compact metric display for the case-metrics rail in TicketDetail.
+   Replaces the old always-on right Sidebar with inline, contextual operational data. */
+const CaseMetric = ({ label, value, valueColor, mono }) => (
+  <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+    <div style={{
+      fontFamily: "Consolas, Monaco, monospace", fontSize: 9, letterSpacing: "0.18em",
+      color: "#6B7D91", textTransform: "uppercase", fontWeight: 700,
+    }}>
+      {label}
+    </div>
+    <div style={{
+      fontFamily: mono ? "Consolas, Monaco, monospace" : 'Calibri, "Segoe UI", system-ui, sans-serif',
+      fontSize: 13, color: valueColor || "#E8EEF4", fontWeight: 600,
+      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 200,
+    }}>
+      {value}
+    </div>
+  </div>
+);
+
 const TicketDetail = ({ ticket, level, onClose, onCompose, onAssign, isMobile }) => {
   const customer = customerById(ticket.customerId);
   const assignee = analystById(ticket.assigneeId);
@@ -1021,6 +1047,35 @@ const TicketDetail = ({ ticket, level, onClose, onCompose, onAssign, isMobile })
             </button>
           )}
         </div>
+
+        {/* Stage 2+ inline case-metrics rail (replaces removed persistent sidebar).
+            Compact, operational, not a dashboard — three data points Sibe cares about. */}
+        {level !== "stage1" && (
+          <div style={{
+            marginTop: 14, padding: "10px 14px",
+            background: T.bgCard, border: `1px solid ${T.divider}`, borderRadius: 4,
+            display: "flex", alignItems: "center", gap: isMobile ? 14 : 24, flexWrap: "wrap",
+          }}>
+            <CaseMetric
+              label="Age"
+              value={fmtAgo(ticket.createdAt).replace(" ago", "")}
+            />
+            <CaseMetric
+              label="Events"
+              value={ticket.events.length}
+            />
+            <CaseMetric
+              label="Source"
+              value={ticket.source === "snypr" ? "SNYPR" : "Email"}
+              valueColor={ticket.source === "snypr" ? T.orange : T.steel}
+            />
+            <CaseMetric
+              label="Contact"
+              value={customer.contact}
+              mono
+            />
+          </div>
+        )}
 
         {/* Assignee row */}
         <div style={{
@@ -1407,94 +1462,10 @@ const SnyprPanel = ({ backlog, onOpenTicket, isMobile }) => {
   );
 };
 
-/* ============================================================
- * L2+ SIDEBAR: Metrics + recent activity
- * ============================================================ */
-
-const Sidebar = ({ tickets, level }) => {
-  const open = tickets.filter((t) => t.status !== "resolved").length;
-  const breached = tickets.filter((t) =>
-    t.status !== "resolved" && slaState(t.createdAt, t.severity) === "breach"
-  ).length;
-  const unassigned = tickets.filter((t) => !t.assigneeId && t.status !== "resolved").length;
-  const byCustomer = CUSTOMERS.map((c) => ({
-    ...c, count: tickets.filter((t) => t.customerId === c.id && t.status !== "resolved").length,
-  }));
-
-  return (
-    <aside style={{
-      width: 260, background: T.bg, borderLeft: `1px solid ${T.divider}`,
-      padding: 20, overflowY: "auto",
-    }}>
-      <div style={{
-        fontFamily: T.fontMono, fontSize: 10, letterSpacing: "0.22em",
-        color: T.orange, fontWeight: 700, textTransform: "uppercase", marginBottom: 14,
-      }}>Queue health</div>
-
-      {[
-        { label: "Open", value: open, color: T.ink },
-        { label: "SLA breaches", value: breached, color: breached > 0 ? T.slaBreach : T.ink },
-        { label: "Unassigned", value: unassigned, color: unassigned > 0 ? T.sevHigh : T.ink },
-      ].map((m) => (
-        <div key={m.label} style={{
-          display: "flex", alignItems: "baseline", justifyContent: "space-between",
-          padding: "10px 0", borderBottom: `1px solid ${T.divider}`,
-        }}>
-          <div style={{
-            fontFamily: T.fontBody, fontSize: 12, color: T.inkDim,
-          }}>{m.label}</div>
-          <div style={{
-            fontFamily: T.fontDisplay, fontSize: 24, color: m.color, fontWeight: 600,
-          }}>{m.value}</div>
-        </div>
-      ))}
-
-      <div style={{
-        fontFamily: T.fontMono, fontSize: 10, letterSpacing: "0.22em",
-        color: T.orange, fontWeight: 700, textTransform: "uppercase",
-        marginTop: 28, marginBottom: 14,
-      }}>By customer</div>
-      {byCustomer.map((c) => (
-        <div key={c.id} style={{
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "8px 0", borderBottom: `1px solid ${T.divider}`,
-        }}>
-          <div>
-            <div style={{ fontFamily: T.fontBody, fontSize: 12, color: T.ink, fontWeight: 500 }}>{c.name}</div>
-            <div style={{ fontFamily: T.fontMono, fontSize: 9, color: T.inkMuted, letterSpacing: "0.1em" }}>{c.tier.toUpperCase()}</div>
-          </div>
-          <div style={{ fontFamily: T.fontMono, fontSize: 13, color: T.ink, fontWeight: 600 }}>{c.count}</div>
-        </div>
-      ))}
-
-      {level === "stage3" && (
-        <>
-          <div style={{
-            fontFamily: T.fontMono, fontSize: 10, letterSpacing: "0.22em",
-            color: T.orange, fontWeight: 700, textTransform: "uppercase",
-            marginTop: 28, marginBottom: 14,
-          }}>Stack integration</div>
-          <div style={{
-            fontFamily: T.fontBody, fontSize: 11, color: T.inkDim, lineHeight: 1.6,
-          }}>
-            <div style={{ marginBottom: 10 }}>
-              <div style={{ color: T.ink, fontWeight: 500, marginBottom: 2 }}>Securonix SNYPR</div>
-              <div>SOAR Python playbook · POST to /api/ingest/snypr</div>
-            </div>
-            <div style={{ marginBottom: 10 }}>
-              <div style={{ color: T.ink, fontWeight: 500, marginBottom: 2 }}>soc@vdalabs.com</div>
-              <div>Inbound email webhook · thread matching</div>
-            </div>
-            <div>
-              <div style={{ color: T.ink, fontWeight: 500, marginBottom: 2 }}>Google Workspace</div>
-              <div>Analyst SSO · magic-link for customers</div>
-            </div>
-          </div>
-        </>
-      )}
-    </aside>
-  );
-};
+/* NOTE: The old persistent right-edge Sidebar was removed in the inbox-rebuild.
+   Queue health + by-customer metrics it used to show now live inline in TicketDetail's
+   CaseMetric rail (Stage 2+). If full dashboard-style queue health is desired later,
+   that's a Phase 2 ask documented in SCOPE_AUDIT.md — not a persistent UI surface. */
 
 /* ============================================================
  * TOAST
@@ -1532,7 +1503,6 @@ export default function SentryAnalyst() {
   const [toast, setToast] = useState({ visible: false, message: "" });
 
   const isMobile = useIsMobile();
-  const isNarrowSidebar = useIsMobile(1200);
   // On mobile, user navigates between panes. Desktop shows everything at once.
   const [mobilePane, setMobilePane] = useState("queue"); // "snypr" | "queue" | "detail"
 
@@ -1736,7 +1706,7 @@ export default function SentryAnalyst() {
       {/* SNYPR Ingest view — full-screen separate view on desktop */}
       {activeView === "snypr" && stage === "stage3" && (
         <div style={{
-          height: "calc(100vh - 57px)", overflowY: "auto",
+          height: "calc(100vh - 48px)", overflowY: "auto",
           padding: "20px 24px", maxWidth: 900, margin: "0 auto", width: "100%",
         }}>
           <div style={{
@@ -1757,14 +1727,16 @@ export default function SentryAnalyst() {
         </div>
       )}
 
-      {/* Tickets view — 2-pane on desktop (queue + detail) */}
+      {/* Tickets view — rail + workspace (not pane + pane).
+          Rail: 420px fixed, feels like an inbox.
+          Workspace: 1fr fluid, feels like the place you actually work. */}
       {activeView === "tickets" && (
         <div style={{
           display: "grid",
-          gridTemplateColumns: "minmax(640px, 760px) 1fr",
-          height: "calc(100vh - 57px)",
+          gridTemplateColumns: "420px 1fr",
+          height: "calc(100vh - 48px)",
         }}>
-          <div style={{ overflowY: "auto", borderRight: `1px solid ${T.divider}` }}>
+          <div style={{ overflowY: "auto", borderRight: `1px solid ${T.divider}`, background: T.bg }}>
             <QueueView
               tickets={tickets} filters={filters} setFilters={setFilters}
               onOpen={onOpenTicket} selectedId={selectedId} level={stage} isMobile={false}
@@ -1773,18 +1745,22 @@ export default function SentryAnalyst() {
             />
           </div>
 
-          <div style={{ overflow: "hidden", position: "relative" }}>
-            {selectedTicket && (
+          <div style={{ overflow: "hidden", position: "relative", background: T.bg }}>
+            {selectedTicket ? (
               <TicketDetail
                 ticket={selectedTicket} level={stage} isMobile={false}
                 onClose={() => setSelectedId(null)}
                 onCompose={() => setComposeOpen(true)}
                 onAssign={() => setAssignOpen(true)}
               />
+            ) : (
+              <div style={{
+                height: "100%", display: "flex", alignItems: "center", justifyContent: "center",
+                color: T.inkMuted, fontFamily: T.fontBody, fontSize: 14,
+              }}>
+                Select a ticket from the queue to open its case.
+              </div>
             )}
-            {/* Stage 2+ persistent sidebar removed — was creating 3-surface layout at desktop >1200px.
-                Sidebar component retained; if Jim/Kendall want it back, wire it as a button-triggered
-                overlay in the detail header (not a permanent third region). */}
           </div>
         </div>
       )}
