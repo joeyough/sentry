@@ -465,8 +465,8 @@ const Header = ({ stage, setStage, activeView, setActiveView }) => {
       display: "flex",
       flexDirection: isMobile ? "column" : "row",
       alignItems: isMobile ? "stretch" : "center",
-      justifyContent: "space-between",
-      gap: isMobile ? 10 : 0,
+      justifyContent: "flex-start",
+      gap: isMobile ? 10 : 16,
       padding: isMobile ? "12px 14px" : "14px 24px",
       background: T.bg,
       borderBottom: `1px solid ${T.divider}`, position: "sticky", top: 0, zIndex: 10,
@@ -505,7 +505,7 @@ const Header = ({ stage, setStage, activeView, setActiveView }) => {
       {/* View nav — Tickets (default) / SNYPR Ingest (stage 3 only) / Queue Health (Phase 2 placeholder) */}
       {!isMobile && (
         <div style={{
-          display: "flex", alignItems: "center", gap: 4, marginLeft: 20,
+          display: "flex", alignItems: "center", gap: 4, marginLeft: 0, flex: 1, minWidth: 0, justifyContent: "center",
         }}>
           <button
             onClick={() => setActiveView("tickets")}
@@ -548,7 +548,7 @@ const Header = ({ stage, setStage, activeView, setActiveView }) => {
 
       <div style={{
         display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap",
-        justifyContent: isMobile ? "flex-start" : "flex-end",
+        justifyContent: isMobile ? "flex-start" : "flex-end", flexShrink: 0,
       }}>
         <span style={{
           fontFamily: T.fontMono, fontSize: 9, letterSpacing: "0.2em",
@@ -572,7 +572,7 @@ const Header = ({ stage, setStage, activeView, setActiveView }) => {
                 transition: "all 120ms ease",
               }}
             >
-              {isMobile ? s.short : s.label}
+              {s.short}
             </button>
           );
         })}
@@ -826,10 +826,10 @@ const TicketRow = ({ ticket, onOpen, selected, isMobile, onQuickAssign, onQuickR
         {ticket.id}
       </div>
       <SevBadge sev={ticket.severity} />
-      <div>
+      <div style={{ minWidth: 0 }}>
         <div style={{
           fontFamily: T.fontBody, fontSize: 13, color: T.ink, fontWeight: 500,
-          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          whiteSpace: "normal", overflowWrap: "anywhere", lineHeight: 1.35,
         }}>{ticket.subject}</div>
         <div style={{
           fontFamily: T.fontMono, fontSize: 10, color: T.inkMuted, marginTop: 3,
@@ -1530,6 +1530,7 @@ export default function SentryAnalyst() {
   const [toast, setToast] = useState({ visible: false, message: "" });
 
   const isMobile = useIsMobile();
+  const isNarrowSidebar = useIsMobile(1200);
   // On mobile, user navigates between panes. Desktop shows everything at once.
   const [mobilePane, setMobilePane] = useState("queue"); // "snypr" | "queue" | "detail"
 
@@ -1604,6 +1605,12 @@ export default function SentryAnalyst() {
   useEffect(() => {
     if (stage !== "stage3" && mobilePane === "snypr") setMobilePane("queue");
   }, [stage, mobilePane]);
+
+  // Desktop hardening: if user leaves stage3 while on the SNYPR view, fall back to Tickets
+  // so the main pane never goes blank.
+  useEffect(() => {
+    if (stage !== "stage3" && activeView === "snypr") setActiveView("tickets");
+  }, [stage, activeView]);
 
   const onOpenTicket = (t) => {
     setSelectedId(t.id);
@@ -1752,7 +1759,7 @@ export default function SentryAnalyst() {
       {activeView === "tickets" && (
         <div style={{
           display: "grid",
-          gridTemplateColumns: "minmax(380px, 480px) 1fr",
+          gridTemplateColumns: "minmax(640px, 760px) 1fr",
           height: "calc(100vh - 57px)",
         }}>
           <div style={{ overflowY: "auto", borderRight: `1px solid ${T.divider}` }}>
@@ -1780,7 +1787,7 @@ export default function SentryAnalyst() {
                 width: 260, background: T.bg,
                 borderLeft: `1px solid ${T.divider}`,
                 overflowY: "auto",
-                display: window.innerWidth > 1200 ? "block" : "none",
+                display: isNarrowSidebar ? "none" : "block",
               }}>
                 <Sidebar tickets={tickets} level={stage} />
               </div>
