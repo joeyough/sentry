@@ -1,173 +1,167 @@
-# BUS_FACTOR.md
+# Sentry — Discovery One-Pager
+**VDA Labs × 3Nails Infosec · Scoping Document · v4**
 
-If the original builder gets hit by a bus, this is the file you read first. It exists so VDA can pick up the repo without the builder, at any point, without losing momentum.
+---
 
-## Architecture (one paragraph)
+## The problem in one sentence
 
-A React + Vite single-page app (two routes: `/` analyst UI, `/portal` customer-facing) backed by Supabase for ticket storage, auth, and row-level tenant isolation. Integration with VDA's Securonix SNYPR SIEM happens via a Python SOAR playbook that POSTs incident payloads to the Sentry ticket API on analyst-initiated state change. Inbound customer email to `soc@vdalabs.com` is routed through a webhook listener that creates or threads tickets. The goal of every decision in this repo is: **make the daily copy-paste that runs Sibe's SOC workflow go away, and make it never come back.**
+VDA's SOC analysts hand-copy every customer email into Securonix SNYPR, and every SNYPR alert into email — there's no ticket of record, SLAs are tracked by memory, and wrong-customer data leakage is a recurring incident.
 
-## Dependencies (complete list)
+## The current state
 
-| Package | Version | Purpose |
-|---------|---------|---------|
-| react | 18+ | UI framework |
-| react-dom | 18+ | DOM rendering |
-| react-router-dom | 6+ | Routing between analyst UI and customer portal |
-| @supabase/supabase-js | 2+ | Database, auth, realtime |
-| lucide-react | 0.383.0 | Icons |
-| tailwindcss | 3.4+ | Utility CSS (used sparingly; components prefer inline styles for portability) |
-| vite | 5+ | Build tool |
+- Halo was abandoned after a 5-month POC consumed 100–200 hours of Jim Blankenship's time and produced nothing usable.
+- Analysts (led by Sibe Klomp, SOC manager) manually copy customer responses from `soc@vdalabs.com` into SNYPR incidents, and manually compose outbound notifications by copying incident detail back into fresh emails.
+- There is no ticket of record. Follow-ups are remembered, not triggered.
+- Mixing one customer's data into another customer's email has happened multiple times. The UI offers no structural prevention.
+- Kendall (VDA leadership) is skeptical this can be fixed without repeating the Halo failure. That skepticism is correct — and the plan is designed around it.
+- ~150 customers. ~12 SOC analysts. 1-hour SLA on critical incidents.
 
-Seven dependencies. All mainstream. No exotic libraries. A junior React dev can extend this without hand-holding.
+## What Sentry is
 
-## Key decisions and why
+A ticketing system and customer portal purpose-built for VDA's SOC workflow. Not a SIEM. Not an XDR. Not a Halo replacement in scope — a narrower, disciplined slice of what Halo was asked to do.
 
-| Decision | Why | Where |
-|----------|-----|-------|
-| Single-file React components | Eliminates build complexity, easier handoff | `src/*.jsx` |
-| Inline styles over Tailwind arbitrary values | Works in any build environment; no JIT compile edge cases | all JSX files |
-| Supabase row-level security for tenancy | Customer A structurally cannot see customer B's tickets. Enforced at the database, not the UI. | Supabase RLS policies |
-| Analyst-initiated SNYPR ingress (not auto) | Sibe explicitly rejected "every alert becomes a ticket." Too much noise. | SNYPR SOAR Python playbook |
-| Severity-driven SLA clock | Matches VDA's 1-hour critical SLA commitment to customers | `sla_rules` table + clock service |
-| Wrong-client prevention via incident-bound context | Outbound email composer cannot mix customer data. The compose UI pulls customer from the ticket, not from a free-text field. | Analyst UI compose flow |
-| Magic-link auth for customers | No password management burden on VDA, no password leaks in customer support tickets | Supabase magic-link auth |
-| Google Workspace SSO for analysts | Kendall controls Workspace admin; aligning auth with existing identity provider keeps her in the loop | Supabase SSO config |
-| Email ingress via webhook, not IMAP polling | Real-time threading, no missed messages, no state drift | Email webhook → edge function |
-| VDA owns the repo, not 3Nails | Survives 3Nails disappearing. No vendor lock-in — the anti-Halo. | GitHub: `joeyough/sentry` (to transfer to VDA org) |
+1. **Ticket core** — open, assign, note (internal + external), status, close. Severity field drives SLA clock.
+2. **SNYPR bridge (analyst-initiated)** — an analyst triaging in SNYPR marks an incident as "open ticket," which fires a SNYPR SOAR Python playbook that POSTs the incident payload to the Sentry ticket API. Not every alert becomes a ticket — the analyst decides.
+3. **Email bridge** — inbound listener on `soc@vdalabs.com`. Subject parsing threads replies to existing tickets; unmatched emails become new tickets.
+4. **Wrong-client prevention** — outbound email composer pulls customer context from the incident payload, not free-text. Structurally prevents one customer's data from being sent to another.
+5. **SLA clock** — per-ticket, severity-driven. Surfaces breaches to the analyst queue. Triggers auto-reminders when a customer doesn't respond in X hours.
+6. **Customer portal** — four views only (per Jim): open a case / view tickets / contract summary / documents. Magic-link auth, row-level tenant isolation.
+7. **Templated outbound emails** — analyst picks template; customer name, ticket ID, severity auto-fill; only free-text fields are editable.
 
-## Data model (Supabase schema, target state week 5)
+## What Sentry is not
 
-```
-customers         → id, name, domain, contract_tier, created_at
-analysts          → id, email (google sso), name, role
-tickets           → id, customer_id, assigned_analyst_id, status,
-                    severity, source ('snypr' | 'email' | 'manual'),
-                    snypr_incident_id, subject, created_at, updated_at,
-                    sla_due_at, last_customer_response_at
-ticket_notes      → id, ticket_id, author_id, author_type ('analyst'|'customer'),
-                    body, internal (bool), created_at
-email_events      → id, ticket_id, direction ('in'|'out'), from_addr, to_addr,
-                    subject, body, headers, received_at
-sla_rules         → id, severity, response_hours, reminder_hours
-email_templates   → id, name, subject_tmpl, body_tmpl, variables (jsonb)
-```
+- **Not a SIEM.** VDA has SNYPR. We integrate, we don't compete.
+- **Not a CRM, quote tool, invoice system, or project manager.** Halo tried to be all of those. Rolled back.
+- **Not a system of record for security telemetry.** VDA's promise to customers is "we don't store your data." SNYPR holds the incident detail. The ticket holds the reference and the communication log.
+- **Not Salesforce, Monday, or Slack.** Those stay. We don't replace them.
 
-All timestamps UTC. All IDs UUIDs. Row-level security enforces `customer_id` filtering on every portal query.
+## Who's who
 
-## Integration: SNYPR bridge
+| Role | Name | What they care about |
+|------|------|----------------------|
+| VDA product owner | **Jim Blankenship** | Scope discipline. Won't sign off on another Halo. |
+| Primary user | **Sibe Klomp** (SOC manager) | Making the daily copy-paste go away. |
+| VDA leadership / sign-off | **Kendall** | Evidence this won't fail the same way. |
+| 3Nails partner | **Vincent** | Technical oversight, delivery accountability. |
+| Builder | Joey (3Nails) | Product, PM, build. |
 
-**What SNYPR is.** SNYPR is Securonix's security analytics platform — next-gen SIEM + UEBA + case management, running natively on Hadoop, with machine-learning-based anomaly detection. It's Gartner MQ Leader for SIEM (six consecutive years as of 2025). VDA uses SNYPR as its primary customer-monitoring platform — where incidents are detected and triaged before any customer communication exists.
+## Halo postmortem (the thing to not repeat)
 
-The integration hook is SNYPR's built-in SOAR capability, which supports Python code blocks inside playbooks. The bridge is a single Python playbook attached to a state-change rule:
+1. **Sold white-glove, delivered homework.** 40 hours of professional services promised. Jim asked for 60. Got 8 actual support hours over 5 months. Everything else was Jim configuring APIs alone.
+2. **Scope drifted into everything.** Started as ticketing. Grew into CRM + PM + quotes + invoicing. Sales hated it. Project team hated it. All rolled back.
+3. **No product owner inside the vendor.** When sales pushed back, there was nobody on Halo's side to advocate for the fix. Jim absorbed the conflict.
+4. **Built against a pitch deck, not a workflow.** The software dictated the process instead of fitting it. Analysts reverted to email within weeks.
 
-```python
-# SNYPR SOAR playbook — analyst-initiated ticket creation
-# Trigger: incident state transitions to "open ticket"
+## What's different this time
 
-def on_state_change(incident):
-    payload = {
-        "snypr_incident_id": incident.id,
-        "severity": incident.severity,
-        "asset": incident.asset,
-        "customer_id": incident.customer_mapping,
-        "summary": incident.summary,
-        "triggering_analyst": incident.current_assignee,
-    }
-    post("https://sentry-vda.netlify.app/api/ingest/snypr", payload,
-         headers={"X-SNYPR-Secret": SECRET})
-```
+- **Sibe is the user, not Jim.** Sibe is in the tool from day one. Every screen is shaped against his daily workflow. Jim's hours are for decisions, not configuration.
+- **Scope is ticketing only for 5 weeks.** Portal and reports are Phase 2 (weeks 9–14). Anything else moves to a separate Phase 3 doc.
+- **VDA operates the deployment and controls its operational data.** React + Vite + Supabase. Junior-readable. No vendor lock-in. The tool survives if 3Nails disappears. Commercial structure is flexible and shaped together, not pre-committed in the deck.
+- **Async-first delivery.** Slack channel with Joey, Vincent, Jim, Sibe. Weekly metric review. No six-month silence before a demo.
+- **Every phase has a kill switch.** If Sibe's copy-paste count isn't zero by week 5 on the two pilot accounts, we stop and diagnose before adding scope.
 
-The endpoint lives as a Netlify edge function (or Supabase edge function — TBD based on where Sibe's team wants the secret to live). It validates the secret, looks up the `customer_id`, and inserts a `tickets` row. The analyst sees the new ticket in the Sentry UI seconds later.
+## Integration architecture
 
-**Why analyst-initiated, not automatic**: every SNYPR alert becoming a ticket = noise Sibe's team already rejected. The analyst triages in SNYPR first; only incidents that need customer communication become tickets.
+### SNYPR bridge (Securonix SOAR → ticket API)
 
-## Integration: Email bridge
+**What SNYPR is.** SNYPR is Securonix's security analytics platform — a next-generation SIEM built on Hadoop that combines log management, UEBA (user and entity behavior analytics), case management, and fraud detection. Securonix has been named a Gartner Magic Quadrant Leader for SIEM six years running. VDA uses SNYPR as the primary detection layer across all customer environments. Sibe's SOC team lives in SNYPR eight hours a day — it's where incidents are triaged, correlated, and classified before any customer communication happens.
 
-Inbound listener on `soc@vdalabs.com` (mail provider TBD — likely Google Workspace mail routing to a webhook). Subject parsing:
+SNYPR ships with a built-in SOAR capability and Python code blocks inside playbooks. That's the integration hook.
 
-- `[VDA-1234]` → thread to ticket #1234
-- No match → new ticket, customer resolved by sender domain via `customers.domain` lookup
-- Ambiguous sender → ticket created in "unassigned" state for analyst routing
-
-Every email (inbound and outbound) is logged in `email_events`. The ticket view shows the full email thread alongside internal analyst notes.
-
-## What needs to happen (weeks 1–5)
-
-1. **Supabase project stood up** — schema above, RLS policies, magic-link email auth.
-2. **Google Workspace SSO configured** — requires Kendall to grant Workspace admin access.
-3. **SNYPR SOAR playbook written and tested** — Sibe's team has an existing dev/staging SNYPR instance.
-4. **Email routing configured** — `soc@vdalabs.com` webhook target.
-5. **Analyst UI build** — queue, compose (with wrong-client prevention), notes, SLA display.
-6. **Template library seeded** — outbound email templates pre-loaded from what VDA sends today.
-7. **Pilot with 2 customers** — Sibe + one other analyst live on those accounts only.
-
-## What is explicitly NOT in this build
-
-- Customer portal (Phase 2, weeks 9–14)
-- Monthly customer reports (Phase 2)
-- License usage tracking, CMDB, knowledge base, recurring tasks (Phase 2)
-- Anything related to quotes, invoices, agreements, CRM, project management (never — Halo failure modes)
-
-## Secrets and configuration
-
-| Secret | Where stored | Notes |
-|--------|--------------|-------|
-| `VITE_SUPABASE_URL` | Netlify env, client-safe | Public URL |
-| `VITE_SUPABASE_ANON_KEY` | Netlify env, client-safe | Anon key; RLS enforces safety |
-| `SUPABASE_SERVICE_ROLE` | Netlify edge function env only | Never exposed to client |
-| `SNYPR_WEBHOOK_SECRET` | Netlify edge function env + SNYPR playbook config | Shared secret for POST validation |
-| `EMAIL_WEBHOOK_SECRET` | Netlify edge function env + email provider config | Shared secret for inbound email |
-
-No OAuth tokens stored. No customer passwords stored (magic link only).
-
-## File structure
+The flow:
 
 ```
-sentry/
-├── README.md
-├── package.json
-├── vite.config.js
-├── tailwind.config.js
-├── netlify.toml
-├── index.html
-├── src/
-│   ├── index.css
-│   ├── main.jsx
-│   ├── App.jsx                  ← Router: / → analyst UI, /portal → customer portal
-│   └── components/              ← to be populated in week 3 build
-├── public/
-│   └── sentry-design-system-v3.html   ← standalone design system reference
-├── api/                         ← Netlify edge functions
-│   ├── ingest-snypr.js
-│   ├── ingest-email.js
-│   └── sla-tick.js
-├── supabase/
-│   ├── migrations/              ← SQL schema migrations
-│   └── seed.sql                 ← initial SLA rules, email templates
-└── docs/
-    ├── DISCOVERY.md             ← scoping doc
-    └── BUS_FACTOR.md            ← you are here
+Analyst triages incident in SNYPR
+  ↓
+Sets incident state: "open ticket"
+  ↓
+SNYPR playbook triggering rule fires
+  ↓
+Python playbook POSTs to Sentry ticket API:
+  { incident_id, severity, asset, customer_id, summary }
+  ↓
+Ticket created. Analyst notified in Sentry UI.
 ```
 
-## Deck alignment
+Critical design decision: **analyst-initiated**. Sibe explicitly rejected the "every alert becomes a ticket" model. Too much noise. The analyst decides which incidents become customer-facing tickets.
 
-The strategic deck is `VDA_SecOps_Plan_v4.pptx`, 16 slides. It operates at the decision level (Halo replacement framing, 3-options analysis, 20-week roadmap, measurement). This file operates at the implementation level. The deck and this file are complementary — a new team member should read the deck first to understand why, then read this file to understand how.
+### Email bridge (inbound → ticket)
 
-## Who to call
+- Inbound listener on `soc@vdalabs.com`
+- Subject pattern `[VDA-XXXX]` threads to existing ticket
+- Unmatched emails create new ticket; customer assigned by sender domain
+- Every ticket reply from a customer threads automatically — no manual re-entry
 
-| Role | Who | Context |
-|------|-----|---------|
-| VDA product owner | **Jim Blankenship** | Scope decisions, requirements |
-| VDA primary user | **Sibe Klomp** (SOC manager) | Daily workflow, feedback loop |
-| VDA sign-off | **Kendall** | Leadership buy-in, Workspace admin |
-| 3Nails partner | **Vincent** | Technical oversight |
-| Original builder | Joey (3Nails) | Product + build during weeks 1–20 |
-| VDA engineering lead | TBD | To be named during weeks 15–20 adopt phase |
+### Auth + tenancy
 
-## The one-sentence handoff test
+- VDA analysts → Google Workspace SSO (Kendall gates Workspace admin, so this is coordinated up front)
+- Customers → magic-link email auth, no password management
+- Supabase row-level security enforces tenant isolation
 
-A new engineer joining the project should be able to answer this in 30 seconds after reading this file:
+## The 5-week build scope
 
-> *"Build the ticketing layer that replaces Sibe's manual email ↔ SNYPR copy-paste, with wrong-client prevention on the compose flow, in 5 weeks — and don't let scope grow into what Halo tried to be."*
+Taken from Jim's original Halo requirements list (the "feature floor" — Halo could do all of these, so we must too):
 
-If they can't answer that, this file isn't doing its job. Update it until they can.
+- Ticket core with customizable status workflow
+- Tenancy: one customer per ticket, enforced
+- SNYPR SOAR bridge (analyst-initiated)
+- Inbound email bridge on `soc@vdalabs.com`
+- Wrong-client prevention on outbound compose
+- SLA clock (severity-driven)
+- Auto-reminders when customers don't reply
+- Template-based outbound emails
+- Internal + external notes on tickets
+- Assign tickets to individual analysts
+
+**Explicitly Phase 2 (weeks 9–14), not the 5-week build:**
+
+- Customer portal (open a case / tickets / contract / documents)
+- Templated monthly customer reports
+- License usage tracking (SentinelOne, Huntress, SNYPR)
+- Per-customer knowledge base
+- Recurring tasks (weekly platform checks)
+- CMDB for VDA internal devices
+- API key expiration tracking
+- Onboarding project templates with child tickets
+
+**Explicitly out of scope, permanently:**
+
+- Quotes, invoices, agreements
+- CRM (Salesforce stays)
+- Schedule-a-meeting integration
+- Full XDR / SIEM functionality (SNYPR stays)
+- Project management across non-ticket workstreams (Monday stays)
+
+## The 20-week plan
+
+| Weeks | Phase | Deliverable |
+|-------|-------|-------------|
+| 1–2 | **Discover** | 13-question discovery doc back from Jim + Sibe. Slack channel live. Walk one live incident end-to-end in SNYPR with Sibe. |
+| 3–5 | **MVP Ticketing** | Ticket core + SNYPR bridge + email bridge + wrong-client prevention + SLA clock. |
+| 6–8 | **Pilot** | Two pilot customers. Sibe + one other analyst live in the tool daily. Daily Slack feedback. No new features — fix what breaks. |
+| 9–14 | **Portal + Reports** | Customer portal (four views). Templated monthly reports. Roll to remaining 148 customers in waves. |
+| 15–20 | **Adopt** | Named operational owner inside VDA. Weekly metric review. VDA engineers can extend the system as licensing allows. |
+
+## Measurement (deck slide 10 + 16)
+
+Baselines come from sitting with Sibe in weeks 1–2, not from this document.
+
+| Metric | What | Kill switch |
+|--------|------|-------------|
+| **Copy-paste count** | Manual data transfer events Sibe performs per day | Week 5: zero on pilot accounts or we stop and diagnose |
+| **MTTR** | Mean time to resolution per severity | Baselined weeks 1–2, tracked weekly after |
+| **SLA adherence %** | Percentage of tickets meeting severity SLA | Measured from week 5 onward |
+| **Wrong-client incidents** | Times customer A's data goes to customer B | Target: zero |
+| **Analyst adoption** | % of SOC using the tool for customer comms | 70% by week 8 or we stop |
+
+## Next steps
+
+1. **Questionnaire back from Jim + Sibe.** 13 questions, one page each. Delivered to them in the Slack channel.
+2. **Walk one live incident in SNYPR with Sibe.** Document every click and copy-paste. This is the workflow the MVP eliminates.
+3. **Lock 5-week build scope in writing, signed by Kendall.** One page. No moving targets after.
+4. **Stand up the Supabase project.** Schema for tickets, customers, analysts, notes, SLA rules.
+5. **Begin week 3 build.**
+
+---
+
+*Prepared as a scoping artifact, not a contract. This is the starting point for the conversation — not the conclusion.*
