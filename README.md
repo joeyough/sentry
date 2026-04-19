@@ -1,6 +1,6 @@
 # VDA Ticketing & Client Portal
 
-A focused ticketing system and customer portal for VDA Labs' SOC team. Built to replace the manual email ↔ SIM copy-paste that runs Sibe's daily workflow today.
+A focused ticketing system and customer portal for VDA Labs' SOC team. Built to replace the manual email ↔ SIEM copy-paste that runs Sibe's daily workflow today.
 
 Built by 3Nails Infosec. VDA operates the deployment and controls its operational data throughout. No vendor lock-in — the tool survives if 3Nails disappears. Commercial structure is flexible and shaped together.
 
