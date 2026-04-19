@@ -309,6 +309,91 @@ const STAKEHOLDERS = [
       },
     ],
   },
+  {
+    id: "joey",
+    name: "Joey Mentz",
+    self: true,
+    role: "3Nails principal — the one carrying the thread",
+    leadWith:
+      "Your edge is work-first, then price. When pressure climbs, don't skip straight to pricing.",
+    closer:
+      "You came into this to build, not to manage. When you feel pulled to manage, it's a signal — not a promotion.",
+    priorities: [
+      "Prove worth through work before anyone sees a price tag",
+      "Protect focus across the 8 parallel threads — one forward, not eight sideways",
+      "Build things clients can own without you — no dependency trap",
+      "Stay at 30k altitude; delegate the 3-foot work",
+    ],
+    concerns: [
+      "Enabling instead of building — caring more than the owner does",
+      "Thread sprawl — saying yes to a new mess before closing an old one",
+      "Being read as 'too good to be true' before the receipts exist",
+      "Over-rotating on business as identity — you've named it, it's a lifelong watch",
+    ],
+    asks: [
+      "To Kendall — let me work for you first, prove the value, then talk price",
+      "To Vincent — what can I take off your plate so you can build",
+      "To every new client — don't pay me until you've felt it",
+    ],
+    antiPatterns: [
+      "Treating every founder's mess like yours to fix",
+      "Confusing 'helpful' with 'needed'",
+      "Taking on a new thread before closing an old one",
+      "Letting work-first become never-charge",
+    ],
+    read: [
+      "You pitch through analogies — Monopoly, 360 deals, Marie Kondo, video game. Systematic thinking, vernacular voice. Use both on purpose.",
+      "Your default is 'behind the scenes.' Own it when it serves. Notice when it's a retreat from the spotlight.",
+      "You frame focus as spiritual — 'keep God at the center.' That's load-bearing, not decorative.",
+      "You charge less than you're worth by design at the start. Decide consciously when to stop.",
+    ],
+    quotes: [
+      {
+        time: "12:27",
+        src: "intro",
+        text:
+          "Business is my video game, it's my sport, it's my hobby. Being in my mid 30s now, I've learned to find the balance and not over-rotate and idolize and make it all of my life.",
+      },
+      {
+        time: "12:27",
+        src: "intro",
+        text:
+          "I'm not working. I'm just having fun. That's how I exceed and beat the competition.",
+      },
+      {
+        time: "12:27",
+        src: "intro",
+        flag: "core pitch",
+        text:
+          "What does the X stand for? Whatever you need. I'd rather actually be the guy behind the scenes that helps boost you up.",
+      },
+      {
+        time: "18:09",
+        src: "intro",
+        text:
+          "Any business has the same nine departments — legal, HR, finance, marketing, sales, vision, product, technical. How do you focus on what needs to be focused on at that given season. It's like a game of Monopoly to me, a game of strategy. And I really just enjoy chewing on that.",
+      },
+      {
+        time: "1:22:25",
+        src: "secops",
+        text:
+          "Let me just work for you first, because let me prove to you that it's not too good to be true.",
+      },
+      {
+        time: "1:22:25",
+        src: "secops",
+        flag: "watch this",
+        text:
+          "I don't want to do this with everyone. I have to be very careful with who I do it with too — because I could be enabling if it's not done right.",
+      },
+      {
+        time: "1:29:51",
+        src: "secops",
+        text:
+          "We have to be really careful of not getting unfocused. Keep God at the center and keep praying about what we're doing.",
+      },
+    ],
+  },
 ];
 
 // --------------------------------------------------------------------------
@@ -863,7 +948,7 @@ function BriefView({ selected, setSelected, stakeholders }) {
         )}
         <SectionHead>The room</SectionHead>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {stakeholders.map((s) => {
+          {stakeholders.filter((s) => !s.self).map((s) => {
             const active = s.id === selected;
             const loopCount = LOOPS.filter((l) => l.owner === s.id).length;
             return (
@@ -922,11 +1007,73 @@ function BriefView({ selected, setSelected, stakeholders }) {
             );
           })}
         </div>
+
+        {/* you — self-reflection card, separated from the room */}
+        {stakeholders.filter((s) => s.self).map((s) => {
+          const active = s.id === selected;
+          const loopCount = LOOPS.filter((l) => l.owner === s.id).length;
+          return (
+            <div key={s.id} style={{ marginTop: 18 }}>
+              <SectionHead>You</SectionHead>
+              <button
+                onClick={() => setSelected(s.id)}
+                style={{
+                  textAlign: "left",
+                  padding: "10px 12px",
+                  background: active ? T.bgElevated : T.bgCard,
+                  border: `1px solid ${active ? T.orange : T.divider}`,
+                  borderLeft: `3px solid ${active ? T.orange : T.steel}`,
+                  cursor: "pointer",
+                  fontFamily: T.fontBody,
+                  color: T.ink,
+                  width: "100%",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "baseline",
+                    gap: 8,
+                    marginBottom: 3,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontFamily: T.fontDisplay,
+                      fontSize: 15,
+                      fontWeight: 700,
+                      color: T.ink,
+                    }}
+                  >
+                    {s.name}
+                  </div>
+                  {loopCount > 0 && (
+                    <div
+                      style={{
+                        fontFamily: T.fontMono,
+                        fontSize: 10,
+                        color: T.orangeSoft,
+                        letterSpacing: 0.3,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {loopCount} open
+                    </div>
+                  )}
+                </div>
+                <div style={{ fontSize: 11, color: T.inkMuted }}>
+                  {s.role.split("—")[0].trim()}
+                </div>
+              </button>
+            </div>
+          );
+        })}
       </div>
 
       {/* the brief itself */}
       <div>
-        <SectionHead>Before the call</SectionHead>
+        <SectionHead>{person.self ? "Before you open the next tab" : "Before the call"}</SectionHead>
         <div
           style={{
             padding: "18px 20px",
@@ -937,7 +1084,7 @@ function BriefView({ selected, setSelected, stakeholders }) {
           }}
         >
           <div style={{ fontSize: 11, color: T.orangeSoft, letterSpacing: 1, marginBottom: 8 }}>
-            LEAD WITH
+            {person.self ? "REMIND YOURSELF" : "LEAD WITH"}
           </div>
           <div
             style={{
@@ -966,7 +1113,7 @@ function BriefView({ selected, setSelected, stakeholders }) {
           <div style={{ fontFamily: T.fontBody, fontSize: 13, color: T.inkDim, marginBottom: 10 }}>
             {person.role}
           </div>
-          <TrustDial value={person.trust} label={person.trustNote} />
+          {!person.self && <TrustDial value={person.trust} label={person.trustNote} />}
         </div>
 
         <div
@@ -978,11 +1125,11 @@ function BriefView({ selected, setSelected, stakeholders }) {
           }}
         >
           <div>
-            <SectionHead>What they want</SectionHead>
+            <SectionHead>{person.self ? "What you want" : "What they want"}</SectionHead>
             <BulletList items={person.priorities} />
           </div>
           <div>
-            <SectionHead>What keeps them up</SectionHead>
+            <SectionHead>{person.self ? "What keeps you up" : "What keeps them up"}</SectionHead>
             <BulletList items={person.concerns} tone="orange" />
           </div>
         </div>
@@ -996,11 +1143,11 @@ function BriefView({ selected, setSelected, stakeholders }) {
           }}
         >
           <div>
-            <SectionHead>Direct asks</SectionHead>
+            <SectionHead>{person.self ? "Asks you've made of others" : "Direct asks"}</SectionHead>
             <BulletList items={person.asks} />
           </div>
           <div>
-            <SectionHead>Don't do this</SectionHead>
+            <SectionHead>{person.self ? "Don't drift into" : "Don't do this"}</SectionHead>
             <BulletList items={person.antiPatterns} tone="orange" />
           </div>
         </div>
@@ -1016,7 +1163,7 @@ function BriefView({ selected, setSelected, stakeholders }) {
             }}
           >
             <SectionHead style={{ marginBottom: 8, marginTop: 0 }}>
-              The read · how they operate
+              {person.self ? "The read · how you actually operate" : "The read · how they operate"}
             </SectionHead>
             <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
               {person.read.map((r, i) => (
@@ -1304,11 +1451,16 @@ const MEETING_TYPES = [
 ];
 
 function PrepView({ selected, setSelected, stakeholders }) {
+  const prepTargets = stakeholders.filter((s) => !s.self);
   const [meetingType, setMeetingType] = useState("sync");
   const [copied, setCopied] = useState(false);
   const isMobile = useIsMobile();
+  // if self is currently selected, snap to first non-self for Prep
+  const effectiveSelected = prepTargets.find((s) => s.id === selected)
+    ? selected
+    : prepTargets[0].id;
   const person =
-    stakeholders.find((s) => s.id === selected) || stakeholders[0];
+    prepTargets.find((s) => s.id === effectiveSelected) || prepTargets[0];
   const prompt = useMemo(
     () => buildPrepPrompt(person, meetingType, LOOPS),
     [person, meetingType]
@@ -1355,8 +1507,8 @@ function PrepView({ selected, setSelected, stakeholders }) {
       <div>
         <SectionHead>Who</SectionHead>
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          {stakeholders.map((s) => {
-            const active = s.id === selected;
+          {prepTargets.map((s) => {
+            const active = s.id === effectiveSelected;
             const loopCount = LOOPS.filter((l) => l.owner === s.id).length;
             return (
               <button
@@ -1808,12 +1960,14 @@ export default function KnowTheRoom() {
       <nav
         style={{
           display: "flex",
-          gap: 0,
+          gap: isMobile ? 2 : 0,
           marginBottom: 24,
-          borderBottom: `1px solid ${T.divider}`,
-          overflowX: "auto",
-          WebkitOverflowScrolling: "touch",
-          scrollbarWidth: "none",
+          borderBottom: isMobile ? "none" : `1px solid ${T.divider}`,
+          background: isMobile ? T.bgCard : "transparent",
+          border: isMobile ? `1px solid ${T.divider}` : "none",
+          borderRadius: isMobile ? 6 : 0,
+          padding: isMobile ? 3 : 0,
+          width: "100%",
         }}
       >
         {VIEWS.map((v) => {
@@ -1823,19 +1977,35 @@ export default function KnowTheRoom() {
               key={v}
               onClick={() => setView(v)}
               style={{
-                padding: isMobile ? "10px 14px" : "10px 18px",
-                background: "transparent",
+                flex: isMobile ? "1 1 0" : "0 0 auto",
+                padding: isMobile ? "8px 4px" : "10px 18px",
+                background: isMobile
+                  ? active
+                    ? T.orange
+                    : "transparent"
+                  : "transparent",
                 border: "none",
-                borderBottom: `2px solid ${active ? T.orange : "transparent"}`,
-                color: active ? T.ink : T.inkMuted,
+                borderBottom: isMobile
+                  ? "none"
+                  : `2px solid ${active ? T.orange : "transparent"}`,
+                borderRadius: isMobile ? 4 : 0,
+                color: isMobile
+                  ? active
+                    ? T.bg
+                    : T.inkDim
+                  : active
+                  ? T.ink
+                  : T.inkMuted,
                 fontFamily: T.fontBody,
-                fontSize: 13,
-                letterSpacing: 0.8,
+                fontSize: isMobile ? 11 : 13,
+                fontWeight: isMobile && active ? 700 : 400,
+                letterSpacing: isMobile ? 0.4 : 0.8,
                 textTransform: "uppercase",
                 cursor: "pointer",
-                marginBottom: -1,
-                whiteSpace: "nowrap",
-                flex: "0 0 auto",
+                marginBottom: isMobile ? 0 : -1,
+                minWidth: 0,
+                textAlign: "center",
+                transition: "background 0.15s, color 0.15s",
               }}
             >
               {v}
