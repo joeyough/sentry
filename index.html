@@ -7,6 +7,11 @@
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>🛡</text></svg>" />
   </head>
   <body>
+    <form name="sentry-notes" netlify netlify-honeypot="bot-field" hidden>
+      <input type="text" name="sender" />
+      <input type="text" name="subject" />
+      <textarea name="note"></textarea>
+    </form>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
