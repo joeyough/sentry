@@ -18,6 +18,7 @@ import {
   Shield, Monitor, Users, FileText, BarChart3, Layers,
   ArrowRight, Sparkles, FileSignature, ScrollText, Mail,
   Mic, MicOff, Send, ChevronDown, MessageSquare, Check,
+  Network, UserCheck,
 } from "lucide-react";
 
 /* ============================================================
@@ -1102,7 +1103,7 @@ export default function SentryHome() {
             <ExternalTile
               href={PROJECT.deckUrl}
               title="SecOps Rebuild Deck"
-              sub="16 slides. Background, options, scope, metrics, timeline."
+              sub="17 slides. Background, options, scope, metrics, timeline."
               Icon={FileText}
               accent={T.orange}
               isMobile={isMobile}
@@ -1142,7 +1143,7 @@ export default function SentryHome() {
               fontStyle: "italic",
               color: T.inkMuted,
             }}>
-              Discovery findings, scope, and handoff readiness for your team.
+              Discovery, scope, architecture, and handoff readiness for your team.
             </div>
           </div>
           <div style={{
@@ -1159,7 +1160,7 @@ export default function SentryHome() {
               isMobile={isMobile}
             />
             <ExternalTile
-              href="https://github.com/joeyough/sentry/blob/main/docs/SCOPE_AUDIT.md"
+              href="https://github.com/joeyough/sentry/blob/main/SCOPE_AUDIT.md"
               title="Scope Audit"
               sub="What's in, what's out, why."
               Icon={FileSignature}
@@ -1167,10 +1168,26 @@ export default function SentryHome() {
               isMobile={isMobile}
             />
             <ExternalTile
-              href="https://github.com/joeyough/sentry/blob/main/docs/DISCOVERY.md"
+              href="https://github.com/joeyough/sentry/blob/main/DISCOVERY.md"
               title="Discovery Notes"
               sub="Call synthesis, integration patterns."
               Icon={Mail}
+              accent={T.steel}
+              isMobile={isMobile}
+            />
+            <ExternalTile
+              href="https://github.com/joeyough/sentry/blob/main/ARCHITECTURE.md"
+              title="Architecture"
+              sub="How it's wired together."
+              Icon={Network}
+              accent={T.steel}
+              isMobile={isMobile}
+            />
+            <ExternalTile
+              href="https://github.com/joeyough/sentry/blob/main/BUS_FACTOR.md"
+              title="Bus Factor"
+              sub="If we disappear, here's how to keep it running."
+              Icon={UserCheck}
               accent={T.steel}
               isMobile={isMobile}
             />
