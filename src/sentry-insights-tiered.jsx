@@ -1,5 +1,5 @@
 /**
- * sentry-insights-v3.jsx — Sentry Insights v3
+ * sentry-insights-tiered.jsx — Sentry Insights
  * Research-driven advanced reporting & analytics dashboard.
  * Phase 2 reporting preview + VDA sales-tool dual purpose.
  * Toggle is report DEPTH (Standard / Full), not project phase.
@@ -13,7 +13,7 @@
  *   - ScalePad / NinjaOne 2025 QBR best practices
  *   - NIST CSF 2.0 framing
  *
- * Brand system: Sentry v3 tokens. All data mocked. Single-file JSX.
+ * Brand system: Sentry design system tokens. All data mocked. Single-file JSX.
  * PDF export uses jsPDF + jspdf-autotable from CDN (loaded at runtime).
  */
 
@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 
 /* ============================================================
- * BRAND TOKENS — Sentry v3 (locked)
+ * BRAND TOKENS — Sentry design system (locked)
  * ============================================================ */
 const T = {
   bg: "#0A1628", bgCard: "#122238", bgCardEdge: "#1A2E47",
