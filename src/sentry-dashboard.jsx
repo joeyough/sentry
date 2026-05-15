@@ -1,10 +1,10 @@
 /**
  * sentry-dashboard.jsx — Standalone reporting & analytics sandbox
  *
- * Purpose: "Here's what Wave 2 reporting could look like."
+ * Purpose: "Here's what Phase 2 reporting could look like."
  * Two views: Client Executive Report + SOC Ops Engineering Dashboard
  *
- * Brand system: Sentry v3 tokens (navy/burnt orange/steel)
+ * Brand system: Sentry design system tokens (navy/burnt orange/steel)
  * Font stack: Georgia display, Calibri body, Consolas mono
  * All data mocked. No backend calls. Single-file JSX.
  */
@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 
 /* ============================================================
- * BRAND TOKENS — Sentry v3
+ * BRAND TOKENS — Sentry design system
  * ============================================================ */
 const T = {
   bg: "#0A1628",
