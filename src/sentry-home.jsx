@@ -445,12 +445,18 @@ const NotesWidget = ({ isMobile }) => {
     setShowPreview(true);
   };
 
-  // Netlify Forms picks up form submissions via the standard HTML form POST.
-  // We let the form submit natively (no preventDefault on submit) so Netlify
-  // intercepts. Before the native submit fires, we write to localStorage so
-  // the running log updates immediately on this device.
+  // Netlify Forms accepts AJAX submissions too. We use that path here:
+  // a native form POST would redirect the browser to Netlify's default
+  // success URL (e.g. "/?form-submitted=..."), which is not a real route
+  // in this SPA, so the user lands on a 404. Submitting via fetch keeps
+  // them on the page so the thank-you card and live log render normally.
+  //
+  // Netlify still recognizes the form because the hidden form is declared
+  // in index.html at build time, and we include form-name in the POST body.
   const handleSubmit = (e) => {
-    // Synchronously persist to localStorage before Netlify takes over.
+    e.preventDefault();
+
+    // 1. Persist locally so the live log updates immediately on this device.
     const entry = {
       id: `n-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       sender: effectiveSender,
@@ -466,8 +472,37 @@ const NotesWidget = ({ isMobile }) => {
     } catch (err) {
       console.warn("Notes log write failed:", err);
     }
-    // We do NOT preventDefault — Netlify needs the native POST.
-    setTimeout(() => setSubmitted(true), 80);
+
+    // 2. POST to Netlify Forms via fetch (no navigation).
+    const body = new URLSearchParams({
+      "form-name": "sentry-notes",
+      sender: effectiveSender,
+      subject: subject || "",
+      note: polished,
+    }).toString();
+    fetch("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body,
+    }).catch(err => {
+      // If Netlify is briefly unreachable, the local entry above still
+      // stands so the sender's note isn't lost from this device's view.
+      console.warn("Netlify form POST failed:", err);
+    });
+
+    // 3. Flip to the thank-you state.
+    setSubmitted(true);
+  };
+
+  // Reset the form so the user can send another note without a hard refresh.
+  const resetForm = () => {
+    setSender("");
+    setOtherName("");
+    setSubject("");
+    setNote("");
+    setShowPreview(false);
+    setSubmitted(false);
+    setExpanded(true);
   };
 
   // Advance status one step: new -> heard -> integrated -> back to new.
@@ -657,6 +692,22 @@ const NotesWidget = ({ isMobile }) => {
               hours. If it's time-sensitive, ping him directly.
             </div>
           </div>
+        </div>
+        <div style={{ marginBottom: 18 }}>
+          <button
+            type="button"
+            onClick={resetForm}
+            style={{
+              padding: "10px 18px", borderRadius: 6,
+              border: `1px solid ${T.orange}`,
+              background: T.orangeTint, color: T.orange,
+              cursor: "pointer",
+              fontFamily: T.fontMono, fontSize: 10,
+              letterSpacing: "0.14em", fontWeight: 700,
+            }}
+          >
+            SEND ANOTHER NOTE
+          </button>
         </div>
         {renderLog()}
       </div>
