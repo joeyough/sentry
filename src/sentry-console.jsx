@@ -22,12 +22,12 @@
  * view accessed from the top nav. Phase 2 asks (analyst dashboard, queue health)
  * are documented in SCOPE_AUDIT.md, not rendered as dead UI chrome.
  *
- * All data is mocked. Built against the v3 design system:
+ * All data is mocked. Built against the Sentry design system:
  *   navy #0A1628, card #122238, edge #1A2E47
  *   burnt orange #D2691E, steel blue #6B93B8
  *
  * Font stack in the app runtime: Georgia display, Calibri body, Consolas mono.
- * The standalone design-system doc (sentry-design-system-v3.html) uses the
+ * The standalone design-system doc (sentry-design-system.html) uses the
  * system font stack instead — this was a targeted workaround for an iOS Safari
  * rendering bug specific to that doc's layout (sticky nav + backdrop-filter +
  * Georgia at synthesized weights). The app runtime does not trigger that bug
@@ -45,7 +45,7 @@ import {
 } from "lucide-react";
 
 /* ============================================================
- * BRAND TOKENS — pulled directly from design system v3
+ * BRAND TOKENS — pulled directly from the Sentry design system
  * ============================================================ */
 const T = {
   bg: "#0A1628",
