@@ -27,9 +27,9 @@ How Sentry is wired. One page. The reference for what runs where, what talks to 
 │                │                               │                        │
 │                ▼                               ▼                        │
 │   ┌────────────────────────┐    ┌──────────────────────────────────┐    │
-│   │  S3 + CloudFront        │    │  AWS ECS (Fargate)              │    │
-│   │  React build artifacts  │    │  Node.js API container           │    │
-│   │  (Vite build output)    │    │  Auto-scales 1–N tasks           │    │
+│   │  S3 + CloudFront       │    │  AWS ECS (Fargate)               │    │
+│   │  React build artifacts │    │  Node.js API container           │    │
+│   │  (Vite build output)   │    │  Auto-scales 1–N tasks           │    │
 │   └────────────────────────┘    └─────────────┬────────────────────┘    │
 │                                                │                        │
 │                                    (SQL over internal VPC)              │
