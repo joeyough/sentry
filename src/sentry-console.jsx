@@ -1,7 +1,7 @@
 /**
  * sentry-console.jsx — VDA × 3Nails Engineering Console
  *
- * The analyst UI for Sibe's SOC team. Built against the v4 ticketing scope from the
+ * The analyst UI for Sibe's SOC team. Built against the ticketing scope from the
  * discovery call with Jim, Sibe, Kendall, and Vincent.
  *
  * Purpose: eliminate the manual copy-paste workflow between Securonix SNYPR and
