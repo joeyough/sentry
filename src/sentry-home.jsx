@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 
 /* ============================================================
- * BRAND TOKENS — Sentry v3 (locked)
+ * BRAND TOKENS — Sentry design system (locked)
  * ============================================================ */
 const T = {
   bg: "#0A1628",
@@ -78,7 +78,7 @@ const PROJECT = {
     "The analyst console, the customer portal, the board reports, the plan, the design system. Same brand, same data model, same tool. Pick the piece you want to see and we'll go.",
   // ── External resources ──
   deckUrl: "https://sentry-vda.netlify.app/VDA_SecOps_Plan.pdf",  // stable filename — re-upload future versions to this same name
-  designSystemUrl: "https://sentry-vda.netlify.app/sentry-design-system-v2.html",
+  designSystemUrl: "https://sentry-vda.netlify.app/sentry-design-system.html",
   // ── Footer ──
   footerTagline: "BUILT BY 3NAILS INFOSEC FOR VDA LABS",
   footerNote: "NO VENDOR LOCK-IN · YOUR DATA, YOUR DECISIONS",
