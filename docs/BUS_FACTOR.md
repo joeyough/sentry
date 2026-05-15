@@ -178,7 +178,7 @@ sentry/
 ├── public/
 │   ├── VDA_SecOps_Plan.pdf             ← The strategic deck (stable filename)
 │   ├── VDA_Discovery_Questionnaire.pdf ← 13-question doc, filled in by Jim + Sibe
-│   └── sentry-design-system-v2.html    ← Design system reference doc
+│   └── sentry-design-system.html       ← Design system reference doc
 └── docs/
     ├── ARCHITECTURE.md                  ← The technical blueprint
     ├── DISCOVERY.md                     ← Consolidated discovery brief
