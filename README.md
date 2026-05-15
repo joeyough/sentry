@@ -7,12 +7,14 @@ Built by 3Nails Infosec. VDA operates the deployment and controls its operationa
 ## What this is (and what it isn't)
 
 **This is:**
+
 - A ticketing system for VDA's ~11 SOC analysts and ~150 customers
 - A SNYPR bridge that turns analyst-initiated Securonix incidents into tickets, with the correct customer auto-recognized and contacts pre-filled
 - An email bridge that turns customer replies to `soc@vdalabs.com` into ticket activity
 - A mobile-responsive customer portal (open a case, view tickets, contract summary, documents)
 
 **This is not:**
+
 - A SIEM or XDR platform. VDA has SNYPR. We don't compete with it.
 - A CRM, quoting tool, or project management system. Halo tried to be those. It failed.
 - A system of record for security telemetry. Sensitive data stays in SNYPR — we reference incident IDs.
@@ -27,7 +29,7 @@ Full postmortem and the three-phase plan are in the deck: `public/VDA_SecOps_Pla
 
 ## The phases
 
-This repo builds **Phase 1 only**. The later phases are named so the direction is clear, but nothing here commits to them.
+This repo builds Phase 1 only. The later phases are named so the direction is clear, but nothing here commits to them.
 
 - **Phase 1 — Ticketing MVP.** 8 weeks. The analyst console, SNYPR bridge, email bridge, SLA clock, wrong-client prevention, and the mobile-responsive customer portal. First customer notification sent from the tool in week 5; build buffered to 8.
 - **Phase 2 — Reporting + Native Apps.** Templated monthly customer reports, the rest of Halo's requirements list, and native iOS/Android customer apps. Scoped and priced separately, after Phase 1 proves out.
@@ -37,25 +39,25 @@ This repo builds **Phase 1 only**. The later phases are named so the direction i
 
 ```
 src/
-  App.jsx                    React Router — five routes (see below)
-  main.jsx                   Entry point
-  index.css                  Global styles
-  sentry-console.jsx         Analyst console — queue, detail, compose, SNYPR panel
-  sentry-client.jsx          Customer portal — four views
-  sentry-home.jsx            Project home — the one link that ties everything together
-  sentry-insights-tiered.jsx Phase 2 reporting preview — Standard / Full depth
-  sentry-dashboard.jsx       Basic dashboard — early proof-of-concept
+  App.jsx                     React Router — five routes (see below)
+  main.jsx                    Entry point
+  index.css                   Global styles
+  sentry-console.jsx          Analyst console — queue, detail, compose, SNYPR panel
+  sentry-client.jsx           Customer portal — four views
+  sentry-home.jsx             Project home — the one link that ties everything together
+  sentry-insights-tiered.jsx  Phase 2 reporting preview — Standard / Full depth
+  sentry-dashboard.jsx        Basic dashboard — early proof-of-concept
 
 public/
   VDA_SecOps_Plan.pdf              The strategic deck (16 pages)
-  sentry-design-system-v2.html     Design system (standalone reference doc)
+  VDA_Discovery_Questionnaire.pdf  The 13-question discovery doc, filled in by Jim + Sibe
+  sentry-design-system.html        Design system (standalone reference doc)
 
 docs/
-  ARCHITECTURE.md            The technical blueprint — stack, infra, what VDA inherits
-  DISCOVERY.md               Consolidated discovery brief — synthesis of calls + questionnaire
-  discovery-questionnaire.md  The 13-question discovery doc, filled in by Jim + Sibe (source)
-  BUS_FACTOR.md              Handoff notes — if you only read one file, read this
-  SCOPE_AUDIT.md             Feature-by-feature scope reasoning
+  ARCHITECTURE.md  The technical blueprint — stack, infra, what VDA inherits
+  DISCOVERY.md     Consolidated discovery brief — synthesis of calls + questionnaire
+  BUS_FACTOR.md    Handoff notes — if you only read one file, read this
+  SCOPE_AUDIT.md   Feature-by-feature scope reasoning
 ```
 
 ## Routes
@@ -63,7 +65,7 @@ docs/
 The app is a single React SPA with five routes:
 
 | Route | File | What it is |
-|-------|------|------------|
+|---|---|---|
 | `/` | `sentry-console.jsx` | Analyst console — the daily driver for the SOC team |
 | `/home` | `sentry-home.jsx` | Project home — audience-framed entry point, the link to send VDA |
 | `/client` | `sentry-client.jsx` | Customer portal — four views, mobile-responsive |
@@ -72,7 +74,7 @@ The app is a single React SPA with five routes:
 
 ## Quick start
 
-```bash
+```
 git clone https://github.com/joeyough/sentry.git
 cd sentry
 npm install
@@ -83,7 +85,7 @@ Dev server runs at `localhost:5173`. The current JSX files are working prototype
 
 ## Stack
 
-The current prototypes are React + Vite, deployed static on Netlify. The **Phase 1 production stack** is:
+The current prototypes are React + Vite, deployed static on Netlify. The Phase 1 production stack is:
 
 - **React** — the UI, built with Vite
 - **Node.js** — the ticket API
@@ -101,7 +103,7 @@ Standard tooling, fully portable. VDA operates the deployment and controls its o
 The daily driver for VDA's SOC team. Today, an analyst who decides an incident needs customer communication drafts the email in Gmail by hand, looks up contacts in Hudu, pastes addresses in, sends from the shared SOC address, moves the SNYPR incident to "awaiting customer," and pastes the sent email back into the incident comments. The console replaces that.
 
 - **Ticket queue** — open tickets, severity-sorted, filtered by assignee and SLA status
-- **Workflow states** — Jim and Sibe specified four: **Open** (created, unassigned), **Claimed** (an analyst picked it up), **Awaiting Customer** (waiting on a reply, with an expiration / auto-reminder), and **Completed** (resolved — and where possible, this pushes the state back to SNYPR and closes the incident there). A ticket created from SNYPR auto-assigns to the analyst who ran the playbook.
+- **Workflow states** — Jim and Sibe specified four: Open (created, unassigned), Claimed (an analyst picked it up), Awaiting Customer (waiting on a reply, with an expiration / auto-reminder), and Completed (resolved — and where possible, this pushes the state back to SNYPR and closes the incident there). A ticket created from SNYPR auto-assigns to the analyst who ran the playbook.
 - **Ticket composer** — auto-pulls customer context from the incident payload. Structurally prevents sending one customer's data to another (the wrong-contact bug Jim flagged twice — it happens today because contacts are looked up by hand in Hudu).
 - **SNYPR incident reference** — every ticket links back to its SNYPR incident ID. We don't duplicate security data. Each state change on the ticket adds a comment or status change on the SNYPR side.
 - **SLA clock** — per-ticket, severity-driven. VDA has no formal SLAs today and no way to track them; the clock is something Sentry introduces, not something it measures against an existing standard.
@@ -112,18 +114,18 @@ The daily driver for VDA's SOC team. Today, an analyst who decides an incident n
 
 Four views, mobile-responsive. Lower priority than the console for Phase 1 — the SOC manually creates tickets from customer requests, so the portal is a convenience, not the core. Customer actions are read-only / acknowledgment-only in Phase 1.
 
-1. **Home** — open tickets and an "open a case" action
-2. **My tickets** — all tickets with status and last update
-3. **Contract / licenses** — what they bought, usage against limits (SentinelOne, Huntress, SNYPR)
-4. **Documents** — shared docs per customer (SLAs, comms guidelines, onboarding paperwork)
+- **Home** — open tickets and an "open a case" action
+- **My tickets** — all tickets with status and last update
+- **Contract / licenses** — what they bought, usage against limits (SentinelOne, Huntress, SNYPR)
+- **Documents** — shared docs per customer (SLAs, comms guidelines, onboarding paperwork)
 
-Magic-link auth — no passwords to manage, no separate credentials for customers to lose. The design reference Kendall named is **Critical Start NDR's mobile customer app** — a customer should be able to see what's happening with an incident from the palm of their hand. The Phase 1 portal is the responsive-web version of that; native apps are Phase 2.
+Magic-link auth — no passwords to manage, no separate credentials for customers to lose. The design reference Kendall named is Critical Start NDR's mobile customer app — a customer should be able to see what's happening with an incident from the palm of their hand. The Phase 1 portal is the responsive-web version of that; native apps are Phase 2.
 
 ## Integration architecture
 
 ### SNYPR bridge (Securonix SOAR → ticket API)
 
-SNYPR is Securonix's SIEM and ships with a built-in SOAR capability that supports Python code blocks inside playbooks. The integration is **analyst-initiated**:
+SNYPR is Securonix's SIEM and ships with a built-in SOAR capability that supports Python code blocks inside playbooks. The integration is analyst-initiated:
 
 ```
 Analyst triages incident in SNYPR
@@ -144,6 +146,7 @@ Critical: we don't auto-create tickets from every alert. Sibe explicitly rejecte
 ### Email bridge (inbound → ticket)
 
 Inbound listener on `soc@vdalabs.com`, routed via Cloudflare. Subject parsing:
+
 - Subject contains `[VDA-XXXX]` → thread to that ticket
 - No match → create a new ticket, customer resolved by sender domain
 
@@ -164,12 +167,12 @@ Securonix SNYPR SIEM is the confirmed primary source. The EDR products follow: H
 Aligned with the deck's metrics page. Baselines come from shadowing the SOC team in weeks 1–2, not from this document.
 
 | Metric | What it measures | Target |
-|--------|------------------|--------|
-| **Copy-paste count** | Manual data transfer events per day | Week 5: zero for the two pilot accounts |
-| **MTTR** | Mean time to resolution, per severity | Baselined weeks 1–2, tracked after |
-| **SLA adherence** | % of tickets meeting severity SLA | Measured from week 5 — note: VDA has no formal SLA today, so this becomes a number for the first time |
-| **Wrong-client incidents** | Times one customer's data goes to another | Historical: multiple per quarter. Target: zero |
-| **Analyst adoption** | % of SOC using the tool for customer comms | 70% by week 8, or we stop and diagnose |
+|---|---|---|
+| Copy-paste count | Manual data transfer events per day | Week 5: zero for the two pilot accounts |
+| MTTR | Mean time to resolution, per severity | Baselined weeks 1–2, tracked after |
+| SLA adherence | % of tickets meeting severity SLA | Measured from week 5 — note: VDA has no formal SLA today, so this becomes a number for the first time |
+| Wrong-client incidents | Times one customer's data goes to another | Historical: multiple per quarter. Target: zero |
+| Analyst adoption | % of SOC using the tool for customer comms | 70% by week 8, or we stop and diagnose |
 
 If the pilot accounts' copy-paste count isn't zero by week 5, the system isn't working. That's the primary kill switch.
 
@@ -197,7 +200,7 @@ The Phase 1 production app deploys to AWS ECS via Terraform — see `docs/ARCHIT
 ## Why this time is different from Halo
 
 | Halo | This build |
-|------|------------|
+|---|---|
 | Sold white-glove, delivered homework | 3Nails does the work; Jim's hours are for decisions only |
 | Implementation team vanished after the sale | A partner that stays — weekly Slack cadence, named owner at handoff |
 | Scope grew into CRM + PM + quoting | Scope is ticketing only for Phase 1. Phase 2 features live in a separate doc. |
