@@ -836,7 +836,7 @@ const StatusPip = ({ status }) => {
  * not decoration.
  * ============================================================ */
 
-const buildReportHTML = (customer, wave = 2) => {
+const buildReportHTML = (customer, depth = 2) => {
   const c = customer;
   // Split a paragraph into [first sentence, rest] where the first period
   // followed by a space and a capital letter ends the sentence. This skips
@@ -1472,7 +1472,7 @@ const buildReportHTML = (customer, wave = 2) => {
   <!-- ── COVER ── -->
   <div class="cover">
     <div class="cover-band">
-      <div class="cover-eyebrow">SENTRY · INSIGHTS${wave === 1 ? " · STANDARD" : " · FULL"}</div>
+      <div class="cover-eyebrow">SENTRY · INSIGHTS${depth === 1 ? " · STANDARD" : " · FULL"}</div>
       <div class="cover-brand">Quarterly Security Report</div>
     </div>
 
@@ -1633,7 +1633,7 @@ const buildReportHTML = (customer, wave = 2) => {
       </tfoot>
     </table>
 
-    ${wave === 2 ? `
+    ${depth === 2 ? `
     <h3 style="margin-top: 24pt;">How you compare to your peer cohort</h3>
     <div style="font-family: Calibri, sans-serif; font-size: 10pt; color: #5A6A7D; font-style: italic; margin-bottom: 10pt;">
       Cohort: ${escapeHTML(c.cohortLabel)}
@@ -1667,7 +1667,7 @@ const buildReportHTML = (customer, wave = 2) => {
     ` : ""}
   </section>
 
-  ${wave === 2 ? `
+  ${depth === 2 ? `
   <!-- ── 04 · WHAT WE RECOMMEND ── -->
   <section>
     <div class="section-eyebrow"><span class="num">04</span>WHAT WE RECOMMEND</div>
@@ -1693,7 +1693,7 @@ const buildReportHTML = (customer, wave = 2) => {
   </section>
   ` : ""}
 
-  ${wave === 2 ? `
+  ${depth === 2 ? `
   <!-- ── 05 · ROADMAP ── -->
   <section style="page-break-before: always;">
     <div class="section-eyebrow"><span class="num">05</span>THE ROADMAP</div>
@@ -1780,8 +1780,8 @@ const escapeHTML = (s) => {
     .replace(/'/g, "&#39;");
 };
 
-const generatePDF = (customer, wave = 2) => {
-  const html = buildReportHTML(customer, wave);
+const generatePDF = (customer, depth = 2) => {
+  const html = buildReportHTML(customer, depth);
 
   // Primary path: open in a new window. Works in every modern browser, every
   // device. The user saves as PDF via Cmd-P / Ctrl-P inside the new window.
@@ -1816,14 +1816,14 @@ const generatePDF = (customer, wave = 2) => {
  * VIEW: CLIENT (board-ready)
  * ============================================================ */
 
-const ClientView = ({ customer, isMobile, wave = 2 }) => {
+const ClientView = ({ customer, isMobile, depth = 2 }) => {
   const [exporting, setExporting] = useState(false);
   const [expandedInv, setExpandedInv] = useState(null);
   const tt = useTooltip();
 
   const onExport = async () => {
     setExporting(true);
-    try { await generatePDF(customer, wave); }
+    try { await generatePDF(customer, depth); }
     finally { setExporting(false); }
   };
 
@@ -1924,7 +1924,7 @@ const ClientView = ({ customer, isMobile, wave = 2 }) => {
         <StackedSeverityBars data={c.weeklyTickets} h={140} />
       </Card>
 
-      {wave === 1 && (
+      {depth === 1 && (
         <div style={{ marginTop: 30, padding: "20px 22px", borderRadius: 8, background: T.bgCard, border: `1px dashed ${T.orange}55`, display: "flex", gap: 16, alignItems: "flex-start" }}>
           <div style={{ width: 32, height: 32, borderRadius: "50%", background: T.orangeTint, color: T.orange, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: T.fontMono, fontSize: 14, fontWeight: 700, flexShrink: 0 }}>+</div>
           <div style={{ flex: 1 }}>
@@ -1937,7 +1937,7 @@ const ClientView = ({ customer, isMobile, wave = 2 }) => {
         </div>
       )}
 
-      {wave === 2 && (<>
+      {depth === 2 && (<>
       {/* ── Coverage Gaps (A1) ── */}
       <Section num="05" title="Signal Coverage" right={
         <span style={{ fontFamily: T.fontMono, fontSize: 10, color: T.slaOk, fontWeight: 700 }}>{c.kpis.coveragePct}% OVERALL</span>
@@ -2128,7 +2128,7 @@ const ClientView = ({ customer, isMobile, wave = 2 }) => {
  * VIEW: SOC OPS (engineering / internal)
  * ============================================================ */
 
-const SOCView = ({ customer, isMobile, wave = 2 }) => {
+const SOCView = ({ customer, isMobile, depth = 2 }) => {
   const [expandedInv, setExpandedInv] = useState(null);
   const c = customer;
   const tacticCoverage = useMemo(() => {
@@ -2157,7 +2157,7 @@ const SOCView = ({ customer, isMobile, wave = 2 }) => {
         <KPI label="Confirmed" value={c.kpis.confirmed} icon={CheckCircle2} sub={`of ${c.kpis.escalated} escalated`} color={T.steel} />
       </div>
 
-      {wave === 2 && (<>
+      {depth === 2 && (<>
       {/* ── MITRE Coverage Matrix (A7) ── */}
       <Section num="02" title="MITRE ATT&CK Coverage" right={
         <span style={{ fontFamily: T.fontMono, fontSize: 10, color: T.inkMuted }}>{MITRE_DATA.length} techniques · {MITRE_TACTICS.length} tactics</span>
@@ -2222,7 +2222,7 @@ const SOCView = ({ customer, isMobile, wave = 2 }) => {
       </Card>
       </>)}
 
-      {wave === 1 && (
+      {depth === 1 && (
         <div style={{ marginTop: 20, padding: "20px 22px", borderRadius: 8, background: T.bgCard, border: `1px dashed ${T.orange}55`, display: "flex", gap: 16, alignItems: "flex-start" }}>
           <div style={{ width: 32, height: 32, borderRadius: "50%", background: T.orangeTint, color: T.orange, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: T.fontMono, fontSize: 14, fontWeight: 700, flexShrink: 0 }}>+</div>
           <div style={{ flex: 1 }}>
@@ -2351,7 +2351,7 @@ export default function SentryInsightsTiered() {
   const isMobile = useIsMobile();
   const [view, setView] = useState("client");
   const [activeId, setActiveId] = useState("meridian");
-  const [wave, setWave] = useState(1);
+  const [depth, setDepth] = useState(1);
   const customer = CUSTOMERS[activeId];
 
   return (
@@ -2418,12 +2418,12 @@ export default function SentryInsightsTiered() {
                 PHASE 2 REPORTING · PREVIEW
               </div>
               <div style={{ fontFamily: T.fontDisplay, fontSize: isMobile ? 16 : 18, color: T.ink, fontWeight: 700, marginBottom: 4 }}>
-                {wave === 1
+                {depth === 1
                   ? "Standard — the templated monthly report."
                   : "Full — the complete reporting picture."}
               </div>
               <div style={{ fontFamily: T.fontBody, fontSize: 12, color: T.inkDim, lineHeight: 1.55 }}>
-                {wave === 1
+                {depth === 1
                   ? "The monthly report Phase 2 commits to: queue health, decision log, metrics, board-ready PDF. Toggle to Full to see where reporting could go."
                   : "Where reporting could go: coverage gaps, MITRE matrix, peer benchmarking, compliance overlays, threat narrative, remediation roadmap. The ceiling, not the commitment — scoped later, only if ticketing proves out."}
               </div>
@@ -2434,21 +2434,21 @@ export default function SentryInsightsTiered() {
               </div>
               <div style={{ display: "flex", gap: 2, background: T.bgDeep, borderRadius: 6, padding: 3, border: `1px solid ${T.bgCardEdge}` }}>
                 {[
-                  { w: 1, l: "Standard", sub: "Monthly report" },
-                  { w: 2, l: "Full", sub: "The ceiling" },
+                  { d: 1, l: "Standard", sub: "Monthly report" },
+                  { d: 2, l: "Full", sub: "The ceiling" },
                 ].map(opt => (
-                  <button key={opt.w} onClick={() => setWave(opt.w)} style={{
+                  <button key={opt.d} onClick={() => setDepth(opt.d)} style={{
                     fontFamily: T.fontMono, fontSize: 10, letterSpacing: "0.06em",
                     padding: "8px 14px", borderRadius: 4, border: "none", cursor: "pointer",
-                    background: wave === opt.w ? T.orange : "transparent",
-                    color: wave === opt.w ? "#fff" : T.inkDim,
+                    background: depth === opt.d ? T.orange : "transparent",
+                    color: depth === opt.d ? "#fff" : T.inkDim,
                     fontWeight: 700,
                     transition: "all 200ms ease-out",
                     display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 1,
                     minWidth: 90,
                   }}>
                     <span>{opt.l}</span>
-                    <span style={{ fontSize: 8, fontWeight: 400, letterSpacing: "0.1em", opacity: wave === opt.w ? 0.85 : 0.6 }}>{opt.sub}</span>
+                    <span style={{ fontSize: 8, fontWeight: 400, letterSpacing: "0.1em", opacity: depth === opt.d ? 0.85 : 0.6 }}>{opt.sub}</span>
                   </button>
                 ))}
               </div>
@@ -2463,8 +2463,8 @@ export default function SentryInsightsTiered() {
       {/* Content */}
       <div style={{ padding: isMobile ? "14px 10px" : "20px 24px", maxWidth: 1200, margin: "0 auto" }}>
         {view === "client"
-          ? <ClientView customer={customer} isMobile={isMobile} wave={wave} />
-          : <SOCView customer={customer} isMobile={isMobile} wave={wave} />
+          ? <ClientView customer={customer} isMobile={isMobile} depth={depth} />
+          : <SOCView customer={customer} isMobile={isMobile} depth={depth} />
         }
       </div>
 
