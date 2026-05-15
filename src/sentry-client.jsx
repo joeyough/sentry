@@ -1,9 +1,9 @@
 /**
- * sentry-portal.jsx — VDA × 3Nails Customer Portal
+ * sentry-client.jsx — VDA × 3Nails Customer Portal
  *
  * The customer-facing portal. Part of the ticketing system Sentry ships for VDA,
  * built against the v4 scope from the discovery call with Jim, Sibe, and Kendall.
- * Companion to sentry-analyst.jsx — they share the same ticket database, same
+ * Companion to sentry-console.jsx — they share the same ticket database, same
  * soc@vdalabs.com inbound email bridge, and the same Securonix SNYPR integration.
  *
  * Four views in Phase 1 (per Jim's explicit call):
@@ -19,7 +19,7 @@
  * and agreements until it collapsed. This portal stays narrow on purpose.
  *
  * Design note: this portal is the public face of a system whose private face
- * (sentry-analyst.jsx) eliminates manual email ↔ SNYPR copy-paste for Sibe's
+ * (sentry-console.jsx) eliminates manual email ↔ SNYPR copy-paste for Sibe's
  * team and enforces wrong-client prevention on every outbound customer email.
  * The portal exists because the ticketing layer needs a customer-facing surface;
  * it is deliberately quiet about the internal workflow it's built on top of.
@@ -29,11 +29,11 @@
  * No jargon, no scoring, no survey-style feedback widgets. A ticket portal,
  * not a feedback platform.
  *
- * Brand tokens match the v3 design system and v4 deck:
+ * Brand tokens match the Sentry design system and the SecOps deck:
  *   navy #0A1628, burnt orange #D2691E, steel blue #6B93B8
  *
  * Font stack in the app runtime: Georgia display, Calibri body, Consolas mono.
- * The standalone design-system doc (sentry-design-system-v3.html) uses the
+ * The standalone design-system doc (sentry-design-system.html) uses the
  * system font stack instead — this was a targeted workaround for an iOS Safari
  * rendering bug specific to that doc's layout (sticky nav + backdrop-filter +
  * Georgia at synthesized weights). The app runtime does not trigger that bug
@@ -50,7 +50,7 @@ import {
 } from "lucide-react";
 
 /* ============================================================
- * BRAND TOKENS — match design system v3
+ * BRAND TOKENS — match the Sentry design system
  * ============================================================ */
 const T = {
   // Dark frame (outer chrome, header)
