@@ -2,7 +2,7 @@
  * sentry-client.jsx — VDA × 3Nails Customer Portal
  *
  * The customer-facing portal. Part of the ticketing system Sentry ships for VDA,
- * built against the v4 scope from the discovery call with Jim, Sibe, and Kendall.
+ * built against the scope from the discovery call with Jim, Sibe, and Kendall.
  * Companion to sentry-console.jsx — they share the same ticket database, same
  * soc@vdalabs.com inbound email bridge, and the same Securonix SNYPR integration.
  *
