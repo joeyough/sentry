@@ -155,6 +155,7 @@ const Tile = ({ to, title, sub, Icon, accent = T.orange, primary = false, isMobi
       to={to}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
+      onClick={() => window.scrollTo(0, 0)}
       style={{
         display: "block",
         textDecoration: "none",
@@ -1160,7 +1161,7 @@ export default function SentryHome() {
               isMobile={isMobile}
             />
             <ExternalTile
-              href="https://github.com/joeyough/sentry/blob/main/SCOPE_AUDIT.md"
+              href="https://github.com/joeyough/sentry/blob/main/docs/SCOPE_AUDIT.md"
               title="Scope Audit"
               sub="What's in, what's out, why."
               Icon={FileSignature}
@@ -1168,7 +1169,7 @@ export default function SentryHome() {
               isMobile={isMobile}
             />
             <ExternalTile
-              href="https://github.com/joeyough/sentry/blob/main/DISCOVERY.md"
+              href="https://github.com/joeyough/sentry/blob/main/docs/DISCOVERY.md"
               title="Discovery Notes"
               sub="Call synthesis, integration patterns."
               Icon={Mail}
@@ -1176,7 +1177,7 @@ export default function SentryHome() {
               isMobile={isMobile}
             />
             <ExternalTile
-              href="https://github.com/joeyough/sentry/blob/main/ARCHITECTURE.md"
+              href="https://github.com/joeyough/sentry/blob/main/docs/ARCHITECTURE.md"
               title="Architecture"
               sub="How it's wired together."
               Icon={Network}
@@ -1184,7 +1185,7 @@ export default function SentryHome() {
               isMobile={isMobile}
             />
             <ExternalTile
-              href="https://github.com/joeyough/sentry/blob/main/BUS_FACTOR.md"
+              href="https://github.com/joeyough/sentry/blob/main/docs/BUS_FACTOR.md"
               title="Bus Factor"
               sub="If we disappear, here's how to keep it running."
               Icon={UserCheck}
