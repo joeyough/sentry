@@ -29,7 +29,7 @@ From the 45-minute discovery call with Jim, Sibe, Vincent, and Joey (transcript 
 
 - *"We don't need anything super crazy. It just needs to be able to our SOC team to be able to send notifications to our customers based on severity, and then everything regarding that ticket or event is logged against that ticket and through closure, and then also maybe a mechanism for a customer to open a case directly with us."*
 - *"I'm leery to bite off on too much, just based on our [Halo experience]. I want to focus on ticketing."*
-- *"We just need them [the 12 SOC analysts] to be able to use this tool and communicate with our roughly 150 customers."*
+- *"We just need them [the 11 SOC analysts] to be able to use this tool and communicate with our roughly 150 customers."*
 - On why Halo failed: *"We tried to do too much at one time, too much change at once."* — this is the single most important quote in the transcript.
 
 ### Sibe's workflow-anchor quotes
@@ -69,7 +69,7 @@ Not everything Vince said was v2/v3-specific. A few points translate:
 
 - **"Feel interactive on hover"** — valid. v4 ticket rows have hover states on desktop and swipe affordances on mobile, but desktop could be richer. Note for Phase 2 polish.
 - **"Cards should come off the page"** — valid. v4 uses subtle shadow on tiles and the Security Report cover. Craft pass OK.
-- **"Shadow and modern style guides for contrast"** — valid, and we already addressed this on mobile cover readability (design system v3 mobile fix was the last session).
+- **"Shadow and modern style guides for contrast"** — valid, and we already addressed this on mobile cover readability (design system mobile fix was the last session).
 
 ---
 
@@ -104,7 +104,7 @@ Not everything Vince said was v2/v3-specific. A few points translate:
 |---|---|
 | **Security Report (Phase 2 tile)** | Directly solves Jim's "customers have heartburn about reports" quote. Customers want more than his 5-year-old template. This is the one *new* capability in v4 beyond ticketing, and it has a clean stakeholder quote behind it. |
 | **Swipe UX on mobile (analyst + portal)** | Modern ergonomics for an 11-analyst team that will sometimes triage on phones. Doesn't cost anything on desktop. Joey pushed for this explicitly. |
-| **v4 design system doc** | Kendall is a software developer; he'll want to see design tokens and decisions documented. |
+| **Design system doc** | Kendall is a software developer; he'll want to see design tokens and decisions documented. |
 | **Analyst dashboard (Phase 2, not MVP)** | Vince raised a dashboard ask. The honest version of it inside v4 scope is an *operational* dashboard for Sibe's team — queue health, SLA breach trajectory, tickets per analyst, unassigned backlog. It supports triage, which passes the "does it help Sibe handle 20 tickets before lunch?" test. Belongs in Phase 2, not MVP, because (a) Jim said "focus on ticketing" for the 8-week build, and (b) a queue dashboard needs real ticket data to be useful — you can't design queue-health indicators against mock data and trust them. Scoped strictly to analyst operational use, NOT the cross-customer MSP-wide portfolio view Vince originally described (that was v2 drift and stays Phase 3+). |
 
 ### AT-RISK — not asked for by Jim, should probably trim after discovery answers
@@ -166,7 +166,7 @@ If Kendall (software developer, signed off on killing Halo-scope-creep) reads th
 - `sentry-client.jsx` → 4 Jim tiles. Defensible.
 - `sentry-home.jsx` → project home, the one link to send VDA. Defensible.
 - `sentry-insights-tiered.jsx` → Phase 2 reporting preview, explicitly framed as "the ceiling, not the commitment." Defensible.
-- `sentry-design-system-v2.html` → design tokens + rationale. Defensible.
+- `sentry-design-system.html` → design tokens + rationale. Defensible.
 - `SCOPE_AUDIT.md` → this doc. Proves we thought about it.
 
 If any file fails that test, fix it before the demo — not after.
