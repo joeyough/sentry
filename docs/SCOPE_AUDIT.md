@@ -2,8 +2,8 @@
 
 **Date:** April 17, 2026
 **Author:** Joey Mentz (3Nails Infosec)
-**Status:** Pre-demo audit. Jim's 13 discovery questions sent, awaiting response.
-**Purpose:** Record the scope-discipline reasoning before the MVP demo, so every feature in v4 has a documented justification and every feature we *didn't* build has a documented reason.
+**Status:** Discovery complete. Jim and Sibe's 13-question answers received and reconciled below.
+**Purpose:** Record the scope-discipline reasoning so every feature in the build has a documented justification and every feature we *didn't* build has a documented reason.
 
 ---
 
@@ -80,15 +80,22 @@ Not everything Vince said was v2/v3-specific. A few points translate:
 | Feature | Justification quote |
 |---|---|
 | Ticket queue + detail + compose (analyst console) | Jim: "send notifications based on severity, everything logged against that ticket through closure" |
+| Analyst-initiated SNYPR bridge (not every alert) | Sibe: "I don't want to just get every alert. I just want to focus on things that actually need to be communicated" |
+| Four workflow states: Open, Claimed, Awaiting Customer, Completed | Jim + Sibe Q6: "Open, Claimed, Awaiting Customer, Completed states are the most important" |
+| Auto-assign ticket to the analyst who ran the playbook | Sibe Q6: "auto assign the ticket to the user who ran the playbook" |
 | Wrong-client prevention on every outbound email | Jim: "analysts are working quickly, they'll copy a bunch of information, and then they'll send information to the wrong client" |
 | Email bridge (inbound `soc@vdalabs.com` → ticket) | Sibe: primary pain point is email-to-SNYPR manual copy-paste |
 | SNYPR SOAR bridge (Python playbook → ticket API) | Sibe: "we've got built-in SOAR capabilities, you can run like Python code" |
+| Two-way SNYPR sync (Completed closes the incident) | Sibe Q6: "Completed... would also send the information to SNYPR and close out of the incident there" |
+| Individual email signatures on outbound | Jim Q13: "properly formatted email to customer (individual email signatures)" |
+| Reply confirmation ("your response logged under ticket ###") | Jim Q13: "smooth customer experience where they can reply... gives them a notice" |
 | Customer portal — Open case | Jim: "maybe a mechanism for a customer to open a case directly with us" |
 | Customer portal — My tickets | Jim explicit in the portal walkthrough |
 | Customer portal — Contract | Jim explicit in the portal walkthrough (bought 200 Sentinel One, using 150) |
 | Customer portal — Documents | Jim explicit in the portal walkthrough ("SLAs, communication mechanisms, severity docs") |
-| Severity sort (CRIT first) in queue | How Sibe already mentally sorts — documented in DISCOVERY.md, not a "ranking engine" |
-| BUS_FACTOR.md + DISCOVERY.md | Jim: "we don't want to be stuck with a tool that a year from now is not going to work" — these docs are the handoff guardrail |
+| Severity sort (CRIT first) in queue | How Sibe already mentally sorts — not a "ranking engine" |
+| SLA clock (severity-driven, introduces formal tracking) | Jim + Sibe: VDA has no formal SLA today; the clock creates the measurement |
+| BUS_FACTOR.md + DISCOVERY.md + ARCHITECTURE.md | Jim: "we don't want to be stuck with a tool that a year from now is not going to work" |
 | Mobile responsiveness | Sibe and any SOC analyst using phone during off-hours |
 
 ### DEFENDED — not an explicit ask, but we chose to build it and can justify
@@ -96,9 +103,9 @@ Not everything Vince said was v2/v3-specific. A few points translate:
 | Feature | Why it's defensible |
 |---|---|
 | **Security Report (Phase 2 tile)** | Directly solves Jim's "customers have heartburn about reports" quote. Customers want more than his 5-year-old template. This is the one *new* capability in v4 beyond ticketing, and it has a clean stakeholder quote behind it. |
-| **Swipe UX on mobile (analyst + portal)** | Modern ergonomics for a 12-analyst team that will sometimes triage on phones. Doesn't cost anything on desktop. Joey pushed for this explicitly. |
+| **Swipe UX on mobile (analyst + portal)** | Modern ergonomics for an 11-analyst team that will sometimes triage on phones. Doesn't cost anything on desktop. Joey pushed for this explicitly. |
 | **v4 design system doc** | Kendall is a software developer; he'll want to see design tokens and decisions documented. |
-| **Analyst dashboard (Phase 2, not MVP)** | Vince raised a dashboard ask. The honest version of it inside v4 scope is an *operational* dashboard for Sibe's team — queue health, SLA breach trajectory, tickets per analyst, unassigned backlog. It supports triage, which passes the "does it help Sibe handle 20 tickets before lunch?" test. Belongs in Phase 2, not MVP, because (a) Jim said "focus on ticketing" for the 5-week build, and (b) a queue dashboard needs real ticket data to be useful — you can't design queue-health indicators against mock data and trust them. Scoped strictly to analyst operational use, NOT the cross-customer MSP-wide portfolio view Vince originally described (that was v2 drift and stays Phase 3+). |
+| **Analyst dashboard (Phase 2, not MVP)** | Vince raised a dashboard ask. The honest version of it inside v4 scope is an *operational* dashboard for Sibe's team — queue health, SLA breach trajectory, tickets per analyst, unassigned backlog. It supports triage, which passes the "does it help Sibe handle 20 tickets before lunch?" test. Belongs in Phase 2, not MVP, because (a) Jim said "focus on ticketing" for the 8-week build, and (b) a queue dashboard needs real ticket data to be useful — you can't design queue-health indicators against mock data and trust them. Scoped strictly to analyst operational use, NOT the cross-customer MSP-wide portfolio view Vince originally described (that was v2 drift and stays Phase 3+). |
 
 ### AT-RISK — not asked for by Jim, should probably trim after discovery answers
 
@@ -122,45 +129,44 @@ Not everything Vince said was v2/v3-specific. A few points translate:
 
 ---
 
-## What to do when Jim's 13 answers land
+## What Jim and Sibe's answers told us
 
-The 13 discovery questions were sent after the call. They cover:
+The 13-question discovery questionnaire was returned with answers from both Jim (blue) and Sibe (green). The original is at `public/VDA_Discovery_Questionnaire.pdf`. Here's how the answers mapped against the AT-RISK items above:
 
-- Which SNYPR incident states should trigger ticket creation
-- Which customer contact gets notified at which severity
-- SLA commitments by severity
-- Document repository contents (what goes in the Documents tile?)
-- Customer portal login model (SSO? magic link?)
-- Expected ticket volume per month (sizes the system)
-- Analyst rotation / on-call coverage expectations
-- What to show on the customer's "my tickets" view (open only? everything?)
-- How customers should reply to updates (portal? email? both?)
-- What triggers a status change to "resolved"
-- Retention expectations on ticket data
-- Branding / logo / copy tone preferences
-- Pilot customer for the first demo (which of the 150 customers?)
+**Dashboards (Phase 2 tile):** Jim Q11 said metrics and per-client reports would be "probably not necessary for phase 1 MVP but it would be nice." **Confirmed Phase 2.** Dashboard stays as a Phase 2 item, not MVP. The analyst console shows live queue data (which is just the UI working, not a "dashboard feature"), but generated reports and trend views are Phase 2.
 
-**When the answers come back, map each one against this doc:**
+**Knowledge base:** Jim didn't mention a KB need anywhere in the 13 answers. Sibe named **Hudu** as their existing KB portal. **Cut from the Phase 1 prototype.** If it comes back, it's Phase 2 at the earliest.
 
-1. If Jim's answer **confirms** an IN-SCOPE or DEFENDED feature → ship as-is, note in changelog
-2. If Jim's answer **reveals** we're missing something → add it to IN-SCOPE and scope the build
-3. If Jim's answer **ignores** an AT-RISK feature (Dashboards, KB, Services) → trim that feature
-4. If Jim's answer **asks for** something on the OUT-OF-SCOPE list → reopen the discussion with Kendall, don't silently expand
+**Services tile:** Nobody mentioned it. **Merged into the Contract tile.** The "services" concept was redundant with "contract summary" from the start.
 
-**Do not** trim AT-RISK features tonight based on my audit alone — the honest answer to "cut or keep" will come from what Jim prioritizes in his answers, not from my guess.
+**Stage 3 SNYPR flow demo view:** The questionnaire confirmed the SNYPR bridge is analyst-initiated (Q6, Q7, Q9). The Stage 3 demo view is a prototype demo tool, not a production feature. **Kept as demo, framing confirmed.**
+
+**New item surfaced:** Jim Q9 raised **AI-assisted investigation** as a nice-to-have — "some AI-assisted investigation about the alert or the context of the alert." **Noted, not in Phase 1 scope.** This is a Phase 2+ idea that gets revisited only if ticketing proves out. It is not being built speculatively. Kendall would call that a "science project."
+
+### The reconciliation rule, applied
+
+1. Jim's answers **confirmed** every IN-SCOPE feature → shipped as-is
+2. Jim's answers **revealed** new requirements (four workflow states, auto-assign, individual signatures, reply confirmation, two-way SNYPR sync) → added to IN-SCOPE above
+3. Jim's answers **ignored** the AT-RISK features (Dashboards, KB, Services) → trimmed or deferred as noted
+4. Jim's answer **surfaced** one new nice-to-have (AI investigation) → noted, not built
+
+**Do not** reopen OUT-OF-SCOPE items without Kendall's explicit sign-off. The scope discipline that killed Halo is the same discipline that protects this build.
 
 ---
 
 ## The Kendall test
 
-If Kendall (software developer, signed off on killing Halo-scope-creep) reads the v4 repo tomorrow, can he defend every file?
+If Kendall (software developer, signed off on killing Halo-scope-creep) reads the repo tomorrow, can he defend every file?
 
-- `README.md` → yes, cites Jim's "just ticketing" quote
-- `DISCOVERY.md` → yes, maps to transcript
+- `README.md` → yes, cites Jim's "just ticketing" quote and the Halo postmortem
+- `ARCHITECTURE.md` → yes, the technical blueprint with the Terraform-rebuilds-from-zero property
+- `DISCOVERY.md` → yes, synthesizes all three discovery sources
 - `BUS_FACTOR.md` → yes, addresses Jim's "don't want to be stuck with a tool in a year" concern
-- `sentry-analyst.jsx` → queue + detail + compose only. Defensible.
-- `sentry-portal.jsx` → 4 Jim tiles + Security Report defensible; Dashboards/KB/Services flagged AT-RISK in this doc
-- `sentry-design-system-v3.html` → design tokens + rationale. Defensible.
+- `sentry-console.jsx` → queue + detail + compose only. Defensible.
+- `sentry-client.jsx` → 4 Jim tiles. Defensible.
+- `sentry-home.jsx` → project home, the one link to send VDA. Defensible.
+- `sentry-insights-tiered.jsx` → Phase 2 reporting preview, explicitly framed as "the ceiling, not the commitment." Defensible.
+- `sentry-design-system-v2.html` → design tokens + rationale. Defensible.
 - `SCOPE_AUDIT.md` → this doc. Proves we thought about it.
 
 If any file fails that test, fix it before the demo — not after.
@@ -169,4 +175,4 @@ If any file fails that test, fix it before the demo — not after.
 
 ## One-line summary
 
-**v4 is ticketing plus one earned capability (Security Report), with three Phase 2 tiles flagged for trim pending Jim's answers. Vince's feedback describes a version of the product the team agreed to kill. Honor the stakeholder hierarchy: Jim > Sibe > Vince > Joey's instincts > Claude's aesthetic preferences.**
+**Phase 1 is ticketing plus one earned capability (Security Report). Three AT-RISK features were reconciled against Jim's answers: Dashboards confirmed Phase 2, Knowledge Base cut, Services merged into Contract. One new nice-to-have surfaced (AI-assisted investigation) and was parked. Vince's feedback describes a version of the product the team agreed to kill. Honor the stakeholder hierarchy: Jim > Sibe > Vince > Joey's instincts > Claude's aesthetic preferences. Kendall calls failed scope-creep builds "science projects." This doc exists to make sure we don't build one.**
