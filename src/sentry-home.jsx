@@ -18,7 +18,7 @@ import {
   Shield, Monitor, Users, FileText, BarChart3, Layers,
   ArrowRight, Sparkles, FileSignature, ScrollText, Mail,
   Mic, MicOff, Send, ChevronDown, MessageSquare, Check,
-  Network, UserCheck,
+  Network, UserCheck, ClipboardList,
 } from "lucide-react";
 
 /* ============================================================
@@ -1098,7 +1098,7 @@ export default function SentryHome() {
           </div>
           <div style={{
             display: "grid",
-            gridTemplateColumns: isMobile ? "1fr" : "repeat(2, 1fr)",
+            gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)",
             gap: 12,
           }}>
             <ExternalTile
@@ -1107,6 +1107,14 @@ export default function SentryHome() {
               sub="17 slides. Background, options, scope, metrics, timeline."
               Icon={FileText}
               accent={T.orange}
+              isMobile={isMobile}
+            />
+            <ExternalTile
+              href="https://sentry-vda.netlify.app/VDA_Discovery_Questionnaire.pdf"
+              title="Discovery Questionnaire"
+              sub="Thirteen questions to lock MVP scope. Out with Jim and Sibe."
+              Icon={ClipboardList}
+              accent={T.steel}
               isMobile={isMobile}
             />
             <ExternalTile
