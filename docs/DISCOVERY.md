@@ -28,7 +28,7 @@ Kendall is a software developer himself. He reads things literally and has stron
 
 **He named Critical Start NDR as the customer-experience reference.** His vision: a VDA customer walking down the street in Italy on vacation should be able to pull up their phone and see what's happening with an incident. That's the design north star for the customer portal and eventually native apps. Phase 1 delivers the responsive-web version; Phase 2 adds native iOS/Android.
 
-**He wants clear cost boundaries and ROI, not open-ended engagements.** He explicitly said: "I want to understand the ROI, the cost, and it can't be a surprise." No open-ended arrangements, no vague timelines. Phase 1 is 8 weeks, $15-24k, $3k/week, with milestones shared along the way. Every phase has a kill switch.
+**He wants clear cost boundaries and ROI, not open-ended engagements.** He explicitly said: "I want to understand the ROI, the cost, and it can't be a surprise." No open-ended arrangements, no vague timelines. Phase 1 is 8 weeks, $24k, $3k/week, with milestones shared along the way. Every phase has a kill switch.
 
 ---
 
