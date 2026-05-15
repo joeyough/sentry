@@ -474,8 +474,13 @@ const NotesWidget = ({ isMobile }) => {
     }
 
     // 2. POST to Netlify Forms via fetch (no navigation).
+    // The bot-field key must be present and empty: it mirrors the honeypot
+    // declared on the hidden form in index.html. Browsers send every form
+    // field, including hidden ones, so omitting it makes the submission
+    // look like a script and trips Akismet's spam filter.
     const body = new URLSearchParams({
       "form-name": "sentry-notes",
+      "bot-field": "",
       sender: effectiveSender,
       subject: subject || "",
       note: polished,
