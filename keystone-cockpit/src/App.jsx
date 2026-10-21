@@ -210,9 +210,8 @@ function Systems() {
           {sys.people && (
             <ul className="mt-3 space-y-1.5 border-t border-edge pt-3">
               {PEOPLE.map((p) => (
-                <li key={p.email} className="text-sm leading-snug text-dim">
+                <li key={p.name} className="text-sm leading-snug text-dim">
                   <span className="text-paper">{p.name}</span>
-                  <span className="text-muted"> · {p.email}</span>
                   <span className="block text-[13px] text-muted">{p.role}</span>
                 </li>
               ))}

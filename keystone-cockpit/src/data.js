@@ -21,12 +21,12 @@ export const CONTRACT = {
 };
 
 export const PEOPLE = [
-  { name: "Jon Capra", email: "jcapra@ksg-us.com", role: "CMMC owner and Affirming Official" },
-  { name: "Frans", email: "frans@ksg-us.com", role: "User. Last name TBD" },
-  { name: "Dan Hardison", email: "dan@ksg-us.com", role: "Client contact for accounts, access, and devices" },
-  { name: "Chase", email: "chase@ksg-us.com", role: "User. Last name TBD" },
-  { name: "Chris", email: "cbateman@ksg-us.com", role: "User. Last name TBD" },
-  { name: "Joseph Wright", email: "jwright@ksg-us.com", role: "Sixth user, named by Jon on October 19" },
+  { name: "Jon Capra", role: "CMMC owner and Affirming Official" },
+  { name: "Frans", role: "User. Last name TBD" },
+  { name: "Dan Hardison", role: "Client contact for accounts, access, and devices" },
+  { name: "Chase", role: "User. Last name TBD" },
+  { name: "Chris", role: "User. Last name TBD" },
+  { name: "Joseph Wright", role: "Sixth user, named by Jon on October 19" },
 ];
 
 export const BUILD_STEPS = [
