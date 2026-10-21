@@ -4,11 +4,11 @@ import {
   ListTodo, Gauge, Check,
 } from "lucide-react";
 import {
-  SOURCE, PEOPLE, DAILY, BUILD_ORDER, SYSTEMS, VERIFY,
+  SOURCE, PEOPLE, BUILD_STEPS, SYSTEMS, VERIFY,
   TALK, TALK_FOR, OPEN_ITEMS, PHASES, overallPct,
 } from "./data";
 
-const TODAY_KEY = "keystone-cockpit-today-v1";
+const STEPS_KEY = "keystone-cockpit-steps-v1";
 const VERIFY_KEY = "keystone-cockpit-verify-v1";
 
 const NAV = [
@@ -19,13 +19,6 @@ const NAV = [
   { id: "open", label: "Open", Icon: ListTodo },
   { id: "progress", label: "Progress", Icon: Gauge },
 ];
-
-const dayKey = () => {
-  const d = new Date();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${d.getFullYear()}-${m}-${day}`;
-};
 
 function loadIds(key) {
   try {
@@ -38,28 +31,13 @@ function loadIds(key) {
   }
 }
 
-function loadToday() {
-  try {
-    const raw = window.localStorage.getItem(TODAY_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!parsed || parsed.date !== dayKey() || !Array.isArray(parsed.ids)) return [];
-    return parsed.ids.filter((x) => typeof x === "string");
-  } catch {
-    return [];
-  }
-}
-
 function useChecks(kind) {
-  const [ids, setIds] = useState(() => (kind === "today" ? loadToday() : loadIds(VERIFY_KEY)));
+  const key = kind === "today" ? STEPS_KEY : VERIFY_KEY;
+  const [ids, setIds] = useState(() => loadIds(key));
 
   useEffect(() => {
-    if (kind === "today") {
-      window.localStorage.setItem(TODAY_KEY, JSON.stringify({ date: dayKey(), ids }));
-    } else {
-      window.localStorage.setItem(VERIFY_KEY, JSON.stringify(ids));
-    }
-  }, [kind, ids]);
+    window.localStorage.setItem(key, JSON.stringify(ids));
+  }, [key, ids]);
 
   const toggle = (id) => {
     setIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -82,8 +60,8 @@ function Shell({ screen, setScreen, children }) {
               COCKPIT
             </span>
           </div>
-          <span className="hidden font-mono text-[10px] tracking-[0.14em] text-muted sm:block">
-            JOEY · DRAFT 0.14
+          <span className="font-mono text-[10px] tracking-[0.14em] text-muted">
+            JOEY · DRAFT 0.15
           </span>
         </div>
       </header>
@@ -102,7 +80,7 @@ function Shell({ screen, setScreen, children }) {
                   setScreen(id);
                   window.scrollTo(0, 0);
                 }}
-                className={`flex min-h-14 min-w-[4.5rem] shrink-0 flex-1 flex-col items-center justify-center gap-1 whitespace-nowrap px-2 py-2 text-[11px] font-semibold tracking-wide ${
+                className={`flex min-h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-0.5 py-2 text-[10px] font-semibold leading-none tracking-wide sm:text-[11px] ${
                   on ? "text-orange" : "text-muted"
                 }`}
               >
@@ -173,56 +151,41 @@ function CheckRow({ checked, onToggle, title, detail }) {
 function SourceLine() {
   return (
     <p className="mt-8 font-mono text-[10px] leading-relaxed tracking-wide text-muted">
-      {SOURCE.draft}, {SOURCE.date}, commit {SOURCE.commit}. Later fact: {SOURCE.later}.
-      The private GitHub branch was not readable from this build, so this page follows the Drive export of that draft.
-      Unknowns stay marked TBD.
+      {SOURCE.draft}. Wording commit {SOURCE.commit}. Branch {SOURCE.branch}. {SOURCE.note} Unknowns stay marked TBD.
     </p>
   );
 }
 
 function Today() {
   const { ids, toggle, clear } = useChecks("today");
-  const done = DAILY.filter((item) => ids.includes(item.id)).length;
+  const done = BUILD_STEPS.filter((item) => ids.includes(item.id)).length;
 
   return (
     <div>
-      <Eyebrow>TODAY · PHASE 0</Eyebrow>
-      <Title>Do not build yet.</Title>
+      <Eyebrow>TODAY · BUILD SHEET</Eyebrow>
+      <Title>Build can start once Scott gives a thumbs up on the one-pager and Vince confirms what is in AWS.</Title>
       <Lead>
-        Scott has not signed the design. Draft 0.14 keeps the sandbox closed until that signature is on file.
-        This list is what you do each day while you wait. It clears itself tomorrow.
+        Walk the build sheet from the top. Checks stay on this browser. They are your working list.
+        They do not mean a step is live in AWS. Vince confirms that.
       </Lead>
 
       <div className="mb-3 flex items-baseline justify-between">
         <span className="font-mono text-[10px] font-bold tracking-[0.16em] text-muted">
-          {done} OF {DAILY.length} TODAY
+          {done} OF {BUILD_STEPS.length} STEPS
         </span>
         <button type="button" onClick={clear} className="font-mono text-[10px] font-bold tracking-[0.12em] text-steel">
-          CLEAR TODAY
+          CLEAR CHECKS
         </button>
       </div>
 
-      {DAILY.map((item) => (
+      {BUILD_STEPS.map((item, i) => (
         <CheckRow
           key={item.id}
           checked={ids.includes(item.id)}
           onToggle={() => toggle(item.id)}
-          title={item.text}
+          title={`${String(i + 1).padStart(2, "0")}. ${item.text}`}
         />
       ))}
-
-      <h2 className="mb-2 mt-8 font-display text-xl text-paper">The build, in order</h2>
-      <p className="mb-3 text-sm leading-relaxed text-dim">
-        From the one-page build sheet. These are the steps after the gate opens. They are not all for today.
-      </p>
-      <ol className="space-y-2">
-        {BUILD_ORDER.map((step, i) => (
-          <li key={step} className="flex gap-3 rounded-lg border border-edge bg-card px-3 py-3">
-            <span className="font-mono text-xs font-bold text-orange">{String(i + 1).padStart(2, "0")}</span>
-            <span className="text-sm leading-relaxed text-dim">{step}</span>
-          </li>
-        ))}
-      </ol>
       <SourceLine />
     </div>
   );
@@ -234,7 +197,7 @@ function Systems() {
       <Eyebrow>SYSTEMS</Eyebrow>
       <Title>What we are standing up.</Title>
       <Lead>
-        One line on what each piece is, and who owns it. Desktop type is still a pick. WorkSpaces was the lean. EC2 is what the long doc prices.
+        One line on what each piece is, and who owns it. Vince confirms EC2 or WorkSpaces, Active Directory, and what is already live.
       </Lead>
       {SYSTEMS.map((sys) => (
         <Card key={sys.name}>
@@ -341,10 +304,10 @@ function Talk() {
         </Card>
       ))}
 
-      <section className="mb-3 rounded-lg border border-dashed border-line bg-deep px-4 py-3.5">
-        <div className="mb-1 font-mono text-[10px] font-bold tracking-[0.16em] text-muted">DO NOT READ THIS OUT</div>
-        <p className="text-sm leading-relaxed text-muted">{TALK.costQuiet}</p>
-      </section>
+      <Card>
+        <h2 className="font-display text-lg font-bold text-paper">The contract</h2>
+        <p className="mt-1 text-[15px] leading-relaxed text-dim">{TALK.contract}</p>
+      </Card>
       <SourceLine />
     </div>
   );
@@ -355,7 +318,7 @@ function Open() {
     <div>
       <Eyebrow>OPEN ITEMS</Eyebrow>
       <Title>Still waiting.</Title>
-      <Lead>These are open in Draft 0.14, or they arrived after it and are still not settled.</Lead>
+      <Lead>These are still open in Draft 0.15.</Lead>
       {OPEN_ITEMS.map((item, i) => (
         <Card key={item.title}>
           <div className="mb-1 font-mono text-[10px] font-bold tracking-[0.16em] text-orange">
@@ -378,8 +341,8 @@ function Progress() {
       <Eyebrow>PROGRESS</Eyebrow>
       <Title>{total}% of the weighted plan.</Title>
       <Lead>
-        Weights are fixed: discovery and design 30, build 35, testing 10, SSP 10, assessment 15.
-        Only discovery has a stated percent. The rest are zero because they have not started.
+        Weights are discovery and design 30, build 35, testing 10, SSP 10, assessment 15.
+        About 90 percent of discovery is 27 points. The other phases are 0 if nothing is live in AWS. That is 27 percent.
       </Lead>
 
       <Card>
@@ -391,8 +354,8 @@ function Progress() {
           <div className="h-full rounded-full bg-orange" style={{ width: `${total}%` }} />
         </div>
         <p className="mt-3 text-sm leading-relaxed text-dim">
-          70% of the 30-point discovery weight is 21. Build, testing, the SSP, and the assessment add 0.
-          This is not a practice score. Draft 0.14 still says 0 of 110 practices are designed.
+          About 90 percent of the 30-point discovery weight is 27. Build, testing, the SSP, and the assessment stay at 0 while nothing is confirmed live in AWS. That is 27 percent.
+          Vince must confirm what is live. Each 1 of the 12 build-sheet steps that is live adds about 3 points.
         </p>
       </Card>
 
