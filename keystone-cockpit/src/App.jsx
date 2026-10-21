@@ -338,7 +338,7 @@ function Progress() {
   return (
     <div>
       <Eyebrow>PROGRESS</Eyebrow>
-      <Title>{total}% of the weighted plan.</Title>
+      <Title>About {total}% of the weighted plan. This is an estimate, not a measured score.</Title>
       <Lead>
         Weights are discovery and design 30, build 35, testing 10, SSP 10, assessment 15.
         About 90 percent of discovery is 27 points. The other phases are 0 if nothing is live in AWS. That is 27 percent.

@@ -2,16 +2,15 @@
  * Facts for Joey's cockpit.
  * Draft 0.15, wording commit 53026cbfd373.
  * Branch cursor/draft-0-15-dan-answers.
- * The private architecture repo was not readable from this build.
- * This page follows the Draft 0.15 update brief.
- * Anything that brief does not settle is marked TBD.
+ * Checked against Draft 0.15 (b9e2bc3) on October 21, 2026.
+ * Anything that check does not settle is marked TBD.
  */
 
 export const SOURCE = {
   draft: "Draft 0.15",
   commit: "53026cbfd373",
   branch: "cursor/draft-0-15-dan-answers",
-  note: "The private architecture repo was not readable from this build, so this page follows the Draft 0.15 update brief.",
+  note: "Checked against Draft 0.15 (b9e2bc3) on October 21, 2026.",
 };
 
 export const CONTRACT = {

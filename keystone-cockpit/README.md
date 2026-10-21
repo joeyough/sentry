@@ -2,7 +2,7 @@
 
 Joey's personal cockpit for the Keystone CMMC Level 2 build. It is a small static app. It does not change the Sentry apps in the rest of this repo.
 
-Facts follow Draft 0.15, wording commit `53026cbfd373`, branch `cursor/draft-0-15-dan-answers`. The private architecture repo was not readable from the build that wrote this app, so the page follows that update brief. Anything it does not settle is marked TBD.
+Checked against Draft 0.15 (b9e2bc3) on October 21, 2026. Anything that check does not settle is marked TBD.
 
 ## Run
 
