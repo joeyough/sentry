@@ -1,0 +1,17 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: #0A1628;
+  color: #E8EEF4;
+}
+
+button, input {
+  font-family: inherit;
+}
